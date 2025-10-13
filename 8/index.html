@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Château de Poudlard - Plan 3D</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Cinzel', 'Georgia', serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            overflow: hidden;
+            color: #f4e4c1;
+        }
+        #container {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+        }
+        #controls {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 100;
+            background: rgba(20, 20, 40, 0.85);
+            padding: 20px;
+            border-radius: 10px;
+            border: 2px solid #d4af37;
+            box-shadow: 0 0 20px rgba(212, 175, 55, 0.3);
+        }
+        h1 {
+            font-size: 24px;
+            color: #d4af37;
+            margin-bottom: 15px;
+            text-shadow: 0 0 10px rgba(212, 175, 55, 0.5);
+        }
+        .btn {
+            background: linear-gradient(135deg, #2a5298 0%, #1e3a5f 100%);
+            color: #f4e4c1;
+            border: 2px solid #d4af37;
+            padding: 10px 20px;
+            margin: 5px;
+            cursor: pointer;
+            border-radius: 5px;
+            font-family: inherit;
+            font-size: 14px;
+            transition: all 0.3s;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+        }
+        .btn:hover {
+            background: linear-gradient(135deg, #3a6298 0%, #2e4a6f 100%);
+            box-shadow: 0 0 15px rgba(212, 175, 55, 0.5);
+            transform: translateY(-2px);
+        }
+        .btn:active {
+            transform: translateY(0);
+        }
+        #legend {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            z-index: 100;
+            background: rgba(20, 20, 40, 0.85);
+            padding: 15px;
+            border-radius: 10px;
+            border: 2px solid #d4af37;
+            box-shadow: 0 0 20px rgba(212, 175, 55, 0.3);
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin: 8px 0;
+            font-size: 14px;
+        }
+        .legend-color {
+            width: 30px;
+            height: 20px;
+            margin-right: 10px;
+            border: 1px solid #d4af37;
+            border-radius: 3px;
+        }
+        .secret-chamber {
+            background: #2ecc71;
+            box-shadow: 0 0 10px #2ecc71;
+        }
+        #tooltip {
+            position: absolute;
+            background: rgba(20, 20, 40, 0.95);
+            color: #2ecc71;
+            padding: 10px 15px;
+            border-radius: 5px;
+            border: 2px solid #2ecc71;
+            display: none;
+            z-index: 200;
+            pointer-events: none;
+            font-size: 16px;
+            font-weight: bold;
+            box-shadow: 0 0 20px rgba(46, 204, 113, 0.6);
+            text-shadow: 0 0 10px rgba(46, 204, 113, 0.8);
+        }
+    </style>
+</head>
+<body>
+    <div id="container"></div>
+    
+    <div id="controls">
+        <h1>🏰 Château de Poudlard</h1>
+        <button class="btn" id="pauseBtn">⏸ Pause Animation</button>
+        <button class="btn" id="resetBtn">🔄 Réinitialiser Vue</button>
+        <button class="btn" id="toggleLabels">🏷️ Afficher Labels</button>
+    </div>
+    
+    <div id="legend">
+        <div class="legend-item">
+            <div class="legend-color secret-chamber"></div>
+            <span>Chambre des Secrets</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #8b7355;"></div>
+            <span>Salles de classe</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #5a4a3a;"></div>
+            <span>Couloirs</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #c9b037;"></div>
+            <span>Grande Salle</span>
+        </div>
+    </div>
+    
+    <div id="tooltip"></div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        let scene, camera, renderer, castle, animationPaused = false;
+        let labelSprites = [];
+        let showLabels = false;
+        const tooltip = document.getElementById('tooltip');
+
+        function init() {
+            // Scène
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x0a0a15);
+            scene.fog = new THREE.Fog(0x0a0a15, 50, 200);
+
+            // Caméra
+            camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(60, 50, 60);
+            camera.lookAt(0, 0, 0);
+
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            document.getElementById('container').appendChild(renderer.domElement);
+
+            // Lumières
+            const ambientLight = new THREE.AmbientLight(0x4a4a5a, 0.4);
+            scene.add(ambientLight);
+
+            const mainLight = new THREE.DirectionalLight(0xffd700, 0.6);
+            mainLight.position.set(30, 50, 30);
+            mainLight.castShadow = true;
+            mainLight.shadow.mapSize.width = 2048;
+            mainLight.shadow.mapSize.height = 2048;
+            scene.add(mainLight);
+
+            // Torches (lumières dorées)
+            addTorch(20, 5, 20, 0xff9500);
+            addTorch(-20, 5, 20, 0xff9500);
+            addTorch(20, 5, -20, 0xff9500);
+            addTorch(-20, 5, -20, 0xff9500);
+
+            // Construction du château
+            castle = new THREE.Group();
+            buildCastle();
+            scene.add(castle);
+
+            // Gestion des événements
+            setupControls();
+            
+            window.addEventListener('resize', onWindowResize);
+            renderer.domElement.addEventListener('mousemove', onMouseMove);
+
+            animate();
+        }
+
+        function addTorch(x, y, z, color) {
+            const light = new THREE.PointLight(color, 0.8, 30);
+            light.position.set(x, y, z);
+            scene.add(light);
+        }
+
+        function createWallTexture(color) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 256;
+            canvas.height = 256;
+            const ctx = canvas.getContext('2d');
+            
+            ctx.fillStyle = color;
+            ctx.fillRect(0, 0, 256, 256);
+            
+            // Effet de pierres
+            for(let i = 0; i < 40; i++) {
+                ctx.strokeStyle = `rgba(0,0,0,${Math.random() * 0.3})`;
+                ctx.lineWidth = 2;
+                ctx.strokeRect(
+                    Math.random() * 256,
+                    Math.random() * 256,
+                    Math.random() * 60 + 20,
+                    Math.random() * 40 + 15
+                );
+            }
+            
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.wrapS = THREE.RepeatWrapping;
+            texture.wrapT = THREE.RepeatWrapping;
+            return texture;
+        }
+
+        function createRoom(x, z, width, depth, height, color, isSecret = false) {
+            const wallMaterial = new THREE.MeshStandardMaterial({
+                map: createWallTexture(color),
+                roughness: 0.9,
+                metalness: 0.1
+            });
+
+            if(isSecret) {
+                wallMaterial.emissive = new THREE.Color(0x2ecc71);
+                wallMaterial.emissiveIntensity = 0.5;
+            }
+
+            // Sol
+            const floorGeometry = new THREE.BoxGeometry(width, 0.5, depth);
+            const floorMaterial = new THREE.MeshStandardMaterial({
+                color: 0x3a3a3a,
+                roughness: 0.8
+            });
+            const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+            floor.position.set(x, 0, z);
+            floor.receiveShadow = true;
+            castle.add(floor);
+
+            // Murs
+            const wallHeight = height;
+            const wallThickness = 0.5;
+
+            // Mur Nord
+            const wallN = new THREE.Mesh(
+                new THREE.BoxGeometry(width, wallHeight, wallThickness),
+                wallMaterial
+            );
+            wallN.position.set(x, wallHeight/2, z - depth/2);
+            wallN.castShadow = true;
+            castle.add(wallN);
+
+            // Mur Sud
+            const wallS = new THREE.Mesh(
+                new THREE.BoxGeometry(width, wallHeight, wallThickness),
+                wallMaterial
+            );
+            wallS.position.set(x, wallHeight/2, z + depth/2);
+            wallS.castShadow = true;
+            castle.add(wallS);
+
+            // Mur Est
+            const wallE = new THREE.Mesh(
+                new THREE.BoxGeometry(wallThickness, wallHeight, depth),
+                wallMaterial
+            );
+            wallE.position.set(x + width/2, wallHeight/2, z);
+            wallE.castShadow = true;
+            castle.add(wallE);
+
+            // Mur Ouest
+            const wallW = new THREE.Mesh(
+                new THREE.BoxGeometry(wallThickness, wallHeight, depth),
+                wallMaterial
+            );
+            wallW.position.set(x - width/2, wallHeight/2, z);
+            wallW.castShadow = true;
+            castle.add(wallW);
+
+            // Porte
+            const doorGeometry = new THREE.BoxGeometry(2, 4, 0.3);
+            const doorMaterial = new THREE.MeshStandardMaterial({
+                color: 0x4a2c2a,
+                roughness: 0.95
+            });
+            const door = new THREE.Mesh(doorGeometry, doorMaterial);
+            door.position.set(x + width/2 - 1, 2, z + depth/2);
+            castle.add(door);
+
+            if(isSecret) {
+                floor.userData = { isSecret: true, name: "Chambre des Secrets" };
+            }
+        }
+
+        function createCorridor(x, z, width, length, orientation) {
+            const corridorColor = '#5a4a3a';
+            const wallMaterial = new THREE.MeshStandardMaterial({
+                map: createWallTexture(corridorColor),
+                roughness: 0.9
+            });
+
+            const depth = orientation === 'horizontal' ? 3 : length;
+            const w = orientation === 'horizontal' ? length : 3;
+
+            // Sol
+            const floor = new THREE.Mesh(
+                new THREE.BoxGeometry(w, 0.5, depth),
+                new THREE.MeshStandardMaterial({ color: 0x3a3a3a, roughness: 0.8 })
+            );
+            floor.position.set(x, 0, z);
+            floor.receiveShadow = true;
+            castle.add(floor);
+
+            // Murs du couloir
+            if(orientation === 'horizontal') {
+                const wall1 = new THREE.Mesh(
+                    new THREE.BoxGeometry(length, 5, 0.3),
+                    wallMaterial
+                );
+                wall1.position.set(x, 2.5, z - 1.5);
+                castle.add(wall1);
+
+                const wall2 = new THREE.Mesh(
+                    new THREE.BoxGeometry(length, 5, 0.3),
+                    wallMaterial
+                );
+                wall2.position.set(x, 2.5, z + 1.5);
+                castle.add(wall2);
+
+                // Tableaux
+                for(let i = -length/2 + 5; i < length/2; i += 10) {
+                    addPainting(x + i, 3, z - 1.4);
+                }
+            } else {
+                const wall1 = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.3, 5, length),
+                    wallMaterial
+                );
+                wall1.position.set(x - 1.5, 2.5, z);
+                castle.add(wall1);
+
+                const wall2 = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.3, 5, length),
+                    wallMaterial
+                );
+                wall2.position.set(x + 1.5, 2.5, z);
+                castle.add(wall2);
+
+                // Tableaux
+                for(let i = -length/2 + 5; i < length/2; i += 10) {
+                    addPainting(x + 1.4, 3, z + i);
+                }
+            }
+        }
+
+        function addPainting(x, y, z) {
+            const frame = new THREE.Mesh(
+                new THREE.BoxGeometry(2, 3, 0.1),
+                new THREE.MeshStandardMaterial({ color: 0xd4af37, metalness: 0.7 })
+            );
+            frame.position.set(x, y, z);
+            castle.add(frame);
+
+            const canvas = new THREE.Mesh(
+                new THREE.BoxGeometry(1.6, 2.4, 0.05),
+                new THREE.MeshStandardMaterial({ color: 0x2c1810 })
+            );
+            canvas.position.set(x, y, z);
+            castle.add(canvas);
+        }
+
+        function createTower(x, z, radius, height) {
+            const towerGeometry = new THREE.CylinderGeometry(radius, radius, height, 8);
+            const towerMaterial = new THREE.MeshStandardMaterial({
+                map: createWallTexture('#6b6b6b'),
+                roughness: 0.9
+            });
+            const tower = new THREE.Mesh(towerGeometry, towerMaterial);
+            tower.position.set(x, height/2, z);
+            tower.castShadow = true;
+            castle.add(tower);
+
+            // Toit conique
+            const roofGeometry = new THREE.ConeGeometry(radius + 1, 5, 8);
+            const roofMaterial = new THREE.MeshStandardMaterial({
+                color: 0x2c1810,
+                roughness: 0.7
+            });
+            const roof = new THREE.Mesh(roofGeometry, roofMaterial);
+            roof.position.set(x, height + 2.5, z);
+            castle.add(roof);
+        }
+
+        function buildCastle() {
+            // Grande Salle
+            createRoom(0, 0, 25, 20, 12, '#c9b037');
+
+            // Salles de classe - Aile Est
+            createRoom(20, -15, 10, 10, 8, '#8b7355');
+            createRoom(20, -30, 10, 10, 8, '#8b7355');
+            
+            // Salles de classe - Aile Ouest
+            createRoom(-20, -15, 10, 10, 8, '#8b7355');
+            createRoom(-20, -30, 10, 10, 8, '#8b7355');
+
+            // Chambre des Secrets (sous-sol, niveau -1)
+            createRoom(0, 35, 12, 15, 6, '#1a5c3a', true);
+            
+            // Lumière spéciale pour la Chambre des Secrets
+            const secretLight = new THREE.PointLight(0x2ecc71, 2, 25);
+            secretLight.position.set(0, 3, 35);
+            castle.add(secretLight);
+
+            // Couloirs
+            createCorridor(0, 15, 3, 30, 'vertical');
+            createCorridor(10, -22.5, 3, 15, 'vertical');
+            createCorridor(-10, -22.5, 3, 15, 'vertical');
+            createCorridor(0, -10, 3, 40, 'horizontal');
+
+            // Tours
+            createTower(15, 12, 3, 20);
+            createTower(-15, 12, 3, 20);
+            createTower(15, -12, 3, 18);
+            createTower(-15, -12, 3, 18);
+
+            // Tour de Dumbledore
+            createTower(25, 5, 4, 25);
+        }
+
+        function setupControls() {
+            const pauseBtn = document.getElementById('pauseBtn');
+            const resetBtn = document.getElementById('resetBtn');
+            const toggleLabelsBtn = document.getElementById('toggleLabels');
+
+            pauseBtn.addEventListener('click', () => {
+                animationPaused = !animationPaused;
+                pauseBtn.textContent = animationPaused ? '▶ Reprendre' : '⏸ Pause Animation';
+            });
+
+            resetBtn.addEventListener('click', () => {
+                camera.position.set(60, 50, 60);
+                camera.lookAt(0, 0, 0);
+                animationPaused = false;
+                pauseBtn.textContent = '⏸ Pause Animation';
+            });
+
+            toggleLabelsBtn.addEventListener('click', () => {
+                showLabels = !showLabels;
+                toggleLabelsBtn.textContent = showLabels ? '🏷️ Masquer Labels' : '🏷️ Afficher Labels';
+            });
+
+            // Contrôles souris
+            let isDragging = false;
+            let previousMousePosition = { x: 0, y: 0 };
+
+            renderer.domElement.addEventListener('mousedown', (e) => {
+                isDragging = true;
+                animationPaused = true;
+            });
+
+            renderer.domElement.addEventListener('mouseup', () => {
+                isDragging = false;
+            });
+
+            renderer.domElement.addEventListener('mousemove', (e) => {
+                if(isDragging) {
+                    const deltaX = e.clientX - previousMousePosition.x;
+                    const deltaY = e.clientY - previousMousePosition.y;
+
+                    const rotationSpeed = 0.005;
+                    const radius = Math.sqrt(
+                        camera.position.x ** 2 + camera.position.z ** 2
+                    );
+
+                    const angle = Math.atan2(camera.position.z, camera.position.x);
+                    const newAngle = angle + deltaX * rotationSpeed;
+
+                    camera.position.x = radius * Math.cos(newAngle);
+                    camera.position.z = radius * Math.sin(newAngle);
+                    camera.position.y += deltaY * 0.2;
+
+                    camera.lookAt(0, 0, 0);
+                }
+
+                previousMousePosition = { x: e.clientX, y: e.clientY };
+            });
+
+            // Zoom avec la molette
+            renderer.domElement.addEventListener('wheel', (e) => {
+                e.preventDefault();
+                const zoomSpeed = 0.1;
+                const direction = new THREE.Vector3();
+                camera.getWorldDirection(direction);
+                
+                if(e.deltaY < 0) {
+                    camera.position.addScaledVector(direction, zoomSpeed * 5);
+                } else {
+                    camera.position.addScaledVector(direction, -zoomSpeed * 5);
+                }
+            });
+        }
+
+        function onMouseMove(event) {
+            const mouse = new THREE.Vector2(
+                (event.clientX / window.innerWidth) * 2 - 1,
+                -(event.clientY / window.innerHeight) * 2 + 1
+            );
+
+            const raycaster = new THREE.Raycaster();
+            raycaster.setFromCamera(mouse, camera);
+
+            const intersects = raycaster.intersectObjects(castle.children);
+
+            if(intersects.length > 0) {
+                const object = intersects[0].object;
+                if(object.userData && object.userData.isSecret) {
+                    tooltip.style.display = 'block';
+                    tooltip.style.left = event.clientX + 10 + 'px';
+                    tooltip.style.top = event.clientY + 10 + 'px';
+                    tooltip.textContent = '🐍 ' + object.userData.name;
+                    return;
+                }
+            }
+            tooltip.style.display = 'none';
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            if(!animationPaused) {
+                castle.rotation.y += 0.002;
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        init();
+    </script>
+</body>
+</html>
