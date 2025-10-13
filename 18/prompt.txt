@@ -1,0 +1,23 @@
+Tu es un assistant expert en Python et en déploiement de LLM locaux. 
+Génère un script Python complet pour un chatbot représentant l'école EPSI Lyon. 
+Le chatbot doit :
+
+1. Utiliser le modèle GPT4All le plus petit disponible pour une IA locale.
+2. Charger une base de connaissances et une FAQ depuis des fichiers JSON. Si les fichiers sont absents, utiliser des données par défaut.
+3. Chercher le contexte pertinent dans la base de connaissances en fonction des questions de l'utilisateur.
+4. Vérifier si la question correspond à la FAQ et répondre directement si c’est le cas.
+5. Générer une réponse en utilisant le modèle GPT4All en local avec un prompt système clair : 
+   - L’IA représente l’EPSI Lyon
+   - Répondre de manière précise, amicale et professionnelle
+   - Utiliser uniquement les informations disponibles
+   - Ne pas inventer d’informations
+6. Sauvegarder l’historique des conversations dans un fichier JSON.
+7. Fournir une interface en ligne de commande simple où l’utilisateur peut poser des questions et quitter avec 'quit' ou 'exit'.
+
+Inclure toutes les fonctionnalités suivantes : 
+- Chargement du modèle et messages de statut
+- Gestion des fichiers JSON
+- Méthodes pour charger la connaissance, les FAQ, trouver le contexte, générer la réponse, sauvegarder l’historique
+- Boucle principale pour l’interface utilisateur
+
+Génère le code complet prêt à être exécuté en local.
