@@ -1,0 +1,17 @@
+Tu es un expert en memes et culture internet. Crée un "Starter Pack" humoristique et original pour un étudiant en 5ème année à l'EPSI (école d'informatique), sur le thème "Version Poudlard/Harry Potter".
+Le starter pack doit contenir exactement 16 items essentiels avec :
+- Un nom créatif mêlant références Harry Potter + vie d'étudiant en info
+- Une description courte et drôle (max 2 phrases)
+- Un niveau de rareté (Légendaire/Rare/Commun)
+Contraintes :
+- Mélange culture Harry Potter ET réalités d'étudiant développeur (Docker, Git, Stack Overflow, etc.)
+- Humour basé sur : manque de sommeil, deadlines impossibles, bugs mystérieux, café en excès
+- Références aux workshops intenses de 8h-22h
+- Touches d'autodérision sur le syndrome de l'imposteur, procrastination, etc.
+- Ton décalé, ironique mais bienveillant
+Format de sortie souhaité :
+Pour chaque item, donne :
+🔮 [Emoji] NOM DE L'ITEM
+Rareté : [Légendaire/Rare/Commun]
+Description : [Texte drôle]
+Objectif : faire rire les étudiants en informatique

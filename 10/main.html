@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Starter Pack EPSI 5A - Édition Poudlard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Georgia', serif;
+            background: linear-gradient(135deg, #1a0033 0%, #2d1b4e 50%, #1a0033 100%);
+            color: #f0e6d2;
+            min-height: 100vh;
+            padding: 20px;
+            position: relative;
+            overflow-x: hidden;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: 
+                radial-gradient(2px 2px at 20% 30%, white, transparent),
+                radial-gradient(2px 2px at 60% 70%, white, transparent),
+                radial-gradient(1px 1px at 50% 50%, white, transparent);
+            background-size: 200px 200px;
+            animation: twinkle 3s infinite;
+            pointer-events: none;
+            opacity: 0.3;
+        }
+
+        @keyframes twinkle {
+            0%, 100% { opacity: 0.3; }
+            50% { opacity: 0.6; }
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            position: relative;
+            z-index: 1;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 50px;
+            padding: 40px 20px;
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 20px;
+            border: 2px solid #d4af37;
+            box-shadow: 0 0 30px rgba(212, 175, 55, 0.3);
+        }
+
+        h1 {
+            font-size: 3em;
+            color: #d4af37;
+            text-shadow: 0 0 20px rgba(212, 175, 55, 0.5);
+            margin-bottom: 15px;
+            font-weight: bold;
+        }
+
+        .subtitle {
+            font-size: 1.3em;
+            color: #c0a8d8;
+            font-style: italic;
+            margin-bottom: 10px;
+        }
+
+        .description {
+            font-size: 1em;
+            color: #b8a8c8;
+            max-width: 700px;
+            margin: 0 auto;
+        }
+
+        .filter-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-bottom: 40px;
+            flex-wrap: wrap;
+        }
+
+        .filter-btn {
+            padding: 12px 25px;
+            border: 2px solid #d4af37;
+            background: rgba(0, 0, 0, 0.5);
+            color: #d4af37;
+            border-radius: 25px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 1em;
+            font-weight: bold;
+        }
+
+        .filter-btn:hover, .filter-btn.active {
+            background: #d4af37;
+            color: #1a0033;
+            transform: translateY(-3px);
+            box-shadow: 0 5px 20px rgba(212, 175, 55, 0.4);
+        }
+
+        .items-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 25px;
+            margin-bottom: 50px;
+        }
+
+        .item-card {
+            background: rgba(0, 0, 0, 0.6);
+            border-radius: 15px;
+            padding: 25px;
+            border: 2px solid;
+            transition: all 0.3s;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .item-card::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .item-card:hover::before {
+            opacity: 1;
+        }
+
+        .item-card:hover {
+            transform: translateY(-10px) scale(1.02);
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.5);
+        }
+
+        .item-card.legendaire {
+            border-color: #ff6b35;
+            box-shadow: 0 0 20px rgba(255, 107, 53, 0.3);
+        }
+
+        .item-card.rare {
+            border-color: #9b59b6;
+            box-shadow: 0 0 20px rgba(155, 89, 182, 0.3);
+        }
+
+        .item-card.commun {
+            border-color: #95a5a6;
+            box-shadow: 0 0 20px rgba(149, 165, 166, 0.3);
+        }
+
+        .item-emoji {
+            font-size: 3em;
+            margin-bottom: 15px;
+            display: block;
+        }
+
+        .item-title {
+            font-size: 1.3em;
+            color: #d4af37;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+
+        .item-rarity {
+            display: inline-block;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: bold;
+            margin-bottom: 15px;
+            text-transform: uppercase;
+        }
+
+        .rarity-legendaire {
+            background: linear-gradient(135deg, #ff6b35, #ff8c42);
+            color: white;
+        }
+
+        .rarity-rare {
+            background: linear-gradient(135deg, #9b59b6, #b479d3);
+            color: white;
+        }
+
+        .rarity-commun {
+            background: linear-gradient(135deg, #7f8c8d, #95a5a6);
+            color: white;
+        }
+
+        .item-description {
+            font-size: 0.95em;
+            line-height: 1.6;
+            color: #e0d4c8;
+        }
+
+        footer {
+            text-align: center;
+            padding: 30px;
+            color: #b8a8c8;
+            font-style: italic;
+        }
+
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 2em;
+            }
+
+            .subtitle {
+                font-size: 1.1em;
+            }
+
+            .items-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>✨ Le Starter Pack EPSI 5ème Année ✨</h1>
+            <p class="subtitle">🧙‍♂️ Édition Poudlard - École de Sorcellerie Informatique 🧙‍♀️</p>
+            <p class="description">"Survivre aux Sortilèges de Production et aux Potions de Café"</p>
+        </header>
+
+        <div class="filter-buttons">
+            <button class="filter-btn active" data-filter="tous">🔮 Tous les Items</button>
+            <button class="filter-btn" data-filter="legendaire">⚡ Légendaires</button>
+            <button class="filter-btn" data-filter="rare">💎 Rares</button>
+            <button class="filter-btn" data-filter="commun">⭐ Communs</button>
+        </div>
+
+        <div class="items-grid" id="itemsGrid"></div>
+
+        <footer>
+            <p>🎓 Fait avec amour (et beaucoup de café) pour les étudiants EPSI 🎓</p>
+            <p>⚡ "Après tout ce temps ?" "Toujours." - Rogue parlant de son code legacy ⚡</p>
+        </footer>
+    </div>
+
+    <script>
+        const items = [
+            {
+                emoji: "🔮",
+                title: "LA BAGUETTE DE DÉBOGAGE ELDERWAND",
+                rarity: "legendaire",
+                description: "Un console.log() placé au hasard qui résout mystérieusement le bug. Personne ne sait pourquoi ça marche, mais on ne le supprime JAMAIS du code."
+            },
+            {
+                emoji: "☕",
+                title: "POTION FELIX CAFFEINIS (RED BULL ÉDITION)",
+                rarity: "commun",
+                description: "Consommée à 3h du matin en workshop, elle te donne l'illusion d'être un 10x developer. Effets secondaires : voir ton code danser."
+            },
+            {
+                emoji: "📚",
+                title: "LE GRIMOIRE INTERDIT DE STACK OVERFLOW",
+                rarity: "legendaire",
+                description: "Contient toutes les réponses, mais écrites en langage ancien (posts de 2009). Le copier-coller est autorisé par le Ministère de la Flemme."
+            },
+            {
+                emoji: "🎒",
+                title: "CAPE D'INVISIBILITÉ ANTI-SCRUM MASTER",
+                rarity: "rare",
+                description: "Te rend invisible lors du daily à 9h quand tu t'es couché à 6h. Efficacité réduite si ta webcam Zoom reste allumée."
+            },
+            {
+                emoji: "🐛",
+                title: "LE DÉTRAQUEUR DE PRODUCTION",
+                rarity: "legendaire",
+                description: "Apparaît le vendredi à 17h55 pour aspirer ton âme et ton weekend. Le Patronus git revert est ta seule défense."
+            },
+            {
+                emoji: "🐍",
+                title: "LE BASILIC DE MERGE CONFLICT",
+                rarity: "rare",
+                description: "Créature terrifiante qui te fixe depuis ta pull request. Un seul regard sur <<<<<<< HEAD et ton cerveau se pétrifie."
+            },
+            {
+                emoji: "🗺️",
+                title: "LA CARTE DU MARAUDEUR (GITHUB COPILOT)",
+                rarity: "rare",
+                description: "Révèle magiquement le code que tu dois écrire. \"Je jure solennellement que j'ai écrit ça tout seul, m'sieur.\""
+            },
+            {
+                emoji: "⚡",
+                title: "LA CICATRICE DU SYNDROME DE L'IMPOSTEUR",
+                rarity: "commun",
+                description: "Elle te brûle chaque fois qu'un junior pose une question à laquelle tu ne sais pas répondre. La douleur est permanente."
+            },
+            {
+                emoji: "🦉",
+                title: "LE HIBOU HEDWIG (NOTIFICATIONS SLACK)",
+                rarity: "commun",
+                description: "Arrive à 22h47 pendant ton workshop avec un message urgent : \"quick question\". Spoiler : ce n'est jamais quick."
+            },
+            {
+                emoji: "🏰",
+                title: "LA SALLE SUR DEMANDE (LOCALHOST:3000)",
+                rarity: "rare",
+                description: "Apparaît seulement quand tu en as vraiment besoin. Disparaît mystérieusement devant ton chef de projet avec une erreur 404."
+            },
+            {
+                emoji: "📖",
+                title: "LE JOURNAL INTIME DE TOM JEDUSOR (DOCUMENTATION)",
+                rarity: "legendaire",
+                description: "Personne ne l'a jamais ouvert, mais tout le monde prétend l'avoir lu. Contient des secrets qu'aucun développeur ne connaîtra jamais."
+            },
+            {
+                emoji: "🧪",
+                title: "POTION DE RATATINAGE (DOCKER CONTAINER)",
+                rarity: "rare",
+                description: "Réduit ton application de 50 Go à 500 Mo. \"Mais ça marchait sur ma machine !\" n'est plus une excuse valable."
+            },
+            {
+                emoji: "🧹",
+                title: "LE NIMBUS 2000 (MECHANICAL KEYBOARD)",
+                rarity: "rare",
+                description: "Fait de toi le développeur le plus rapide de ta promo. Accessoire indispensable pour réveiller tout l'amphi à 8h22 du matin."
+            },
+            {
+                emoji: "🔥",
+                title: "LE GOBELET DE FEU (DEADLINE IMPOSSIBLE)",
+                rarity: "commun",
+                description: "Choisit aléatoirement ton nom pour un sprint de 2 semaines à livrer en 3 jours. Refuser la mission = expulsion de Poudlard-EPSI."
+            },
+            {
+                emoji: "🎓",
+                title: "LE CHOIXPEAU MAGIQUE (STACKOVERFLOW REPUTATION)",
+                rarity: "legendaire",
+                description: "Avec 50 points, tu es à Gryffondor (Senior Dev). Avec -2, direction Serpentard (Junior éternel qui pose des questions sans rechercher)."
+            },
+            {
+                emoji: "💀",
+                title: "L'HORCRUXE DE CODE LEGACY",
+                rarity: "legendaire",
+                description: "Fragment d'âme d'un ancien dev parti en 2012, immortalisé dans 47 000 lignes de PHP non commenté. Le détruire prend une éternité."
+            }
+        ];
+
+        const itemsGrid = document.getElementById('itemsGrid');
+        const filterButtons = document.querySelectorAll('.filter-btn');
+
+        function displayItems(filter = 'tous') {
+            itemsGrid.innerHTML = '';
+            const filteredItems = filter === 'tous' 
+                ? items 
+                : items.filter(item => item.rarity === filter);
+
+            filteredItems.forEach((item, index) => {
+                const card = document.createElement('div');
+                card.className = `item-card ${item.rarity}`;
+                card.style.animationDelay = `${index * 0.1}s`;
+                
+                card.innerHTML = `
+                    <span class="item-emoji">${item.emoji}</span>
+                    <h3 class="item-title">${item.title}</h3>
+                    <span class="item-rarity rarity-${item.rarity}">
+                        ${item.rarity === 'legendaire' ? '⚡ Légendaire' : 
+                          item.rarity === 'rare' ? '💎 Rare' : '⭐ Commun'}
+                    </span>
+                    <p class="item-description">${item.description}</p>
+                `;
+                
+                itemsGrid.appendChild(card);
+            });
+        }
+
+        filterButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                filterButtons.forEach(btn => btn.classList.remove('active'));
+                button.classList.add('active');
+                const filter = button.getAttribute('data-filter');
+                displayItems(filter);
+            });
+        });
+
+        displayItems();
+    </script>
+</body>
+</html>
