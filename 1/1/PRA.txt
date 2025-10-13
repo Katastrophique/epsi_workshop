@@ -1,0 +1,921 @@
+Plan de Reprise d'Activité (PRA) - Infrastructure Big Data
+Version: 1.0
+Date: Octobre 2025
+Responsable PRA: William QUESNOT
+Classification: Confidentiel
+
+Table des matières
+
+Vue d'ensemble
+Objectifs de reprise
+Architecture et composants
+Stratégie de sauvegarde
+Procédures de reprise
+Tests et maintenance
+Contacts et escalade
+Annexes
+
+
+1. Vue d'ensemble
+1.1 Objectif du document
+Ce Plan de Reprise d'Activité (PRA) définit les procédures et mesures nécessaires pour restaurer l'infrastructure Big Data en cas de sinistre ou défaillance majeure. Il garantit la continuité des services critiques et minimise l'impact sur les opérations métier.
+1.2 Périmètre
+Le PRA couvre l'ensemble de l'infrastructure dockerisée comprenant :
+
+Système de ticketing (GLPI)
+Système d'historisation (Elasticsearch)
+Système de monitoring (Grafana/Prometheus)
+Datalake (Cassandra)
+Pare-feu applicatif (Traefik)
+Services de support (bases de données, exporters)
+
+1.3 Hypothèses
+
+L'infrastructure de secours est disponible
+Les sauvegardes sont accessibles
+Le personnel qualifié est joignable
+Les procédures sont testées régulièrement
+
+
+2. Objectifs de reprise
+2.1 Indicateurs clés
+ServiceRTO*RPO**CriticitéGLPI (Ticketing)4h1hCRITIQUEElasticsearch2h15minCRITIQUEGrafana/Prometheus1h5minHAUTECassandra4h30minCRITIQUETraefik30min0minCRITIQUE
+*RTO : Recovery Time Objective (temps max de restauration)
+**RPO : Recovery Point Objective (perte de données max acceptable)
+2.2 Niveaux de criticité
+CRITIQUE : Service indispensable, impact direct sur le business
+HAUTE : Service important, impact significatif
+MOYENNE : Service utile, impact modéré
+BASSE : Service non critique, impact minimal
+
+3. Architecture et composants
+3.1 Architecture globale
+┌─────────────────────────────────────────────────┐
+│              INTERNET / UTILISATEURS            │
+└────────────────────┬────────────────────────────┘
+                     │
+         ┌───────────▼──────────┐
+         │   Traefik (Pare-feu) │
+         │   Reverse Proxy      │
+         └───────────┬──────────┘
+                     │
+        ┌────────────┼────────────┐
+        │            │            │
+   ┌────▼────┐  ┌───▼────┐  ┌───▼─────┐
+   │  GLPI   │  │Grafana │  │ Kibana  │
+   │Frontend │  │        │  │         │
+   └────┬────┘  └───┬────┘  └───┬─────┘
+        │           │            │
+   ┌────▼──────────┬┴────────────▼─────┐
+   │         BACKEND NETWORK            │
+   │  ┌──────────┐  ┌──────────────┐   │
+   │  │ MariaDB  │  │ Elasticsearch│   │
+   │  │ (Master) │  │  (Cluster)   │   │
+   │  └──────────┘  └──────────────┘   │
+   │  ┌──────────────────────────┐     │
+   │  │   Cassandra (Cluster)    │     │
+   │  └──────────────────────────┘     │
+   └────────────────┬───────────────────┘
+                    │
+        ┌───────────▼────────────┐
+        │  MONITORING NETWORK    │
+        │  ┌────────────────┐    │
+        │  │  Prometheus    │    │
+        │  │  + Exporters   │    │
+        │  └────────────────┘    │
+        └────────────────────────┘
+3.2 Haute disponibilité par composant
+3.2.1 Elasticsearch (Cluster 3 nœuds)
+
+Master node : Gestion du cluster
+Data nodes (×2) : Stockage et réplication des données
+Réplication factor : 2 (chaque shard a 1 réplica)
+Tolérance aux pannes : 1 nœud peut tomber sans perte de données
+
+3.2.2 Cassandra (Cluster 3 nœuds)
+
+Seed node : Bootstrap du cluster
+Nœuds supplémentaires (×2) : Distribution des données
+Replication factor : 3 (toutes les données sur 3 nœuds)
+Consistency level : QUORUM (2/3 nœuds requis)
+Tolérance aux pannes : 1 nœud peut tomber
+
+3.2.3 MariaDB
+
+Master : Lecture/Écriture
+Configuration actuelle : Single master
+Recommandation production : Master-Slave replication
+
+3.2.4 Traefik
+
+Stateless : Peut être redémarré instantanément
+Configuration : Via labels Docker (versionné)
+Certificats : Stockés dans volume persistant
+
+3.3 Réseau et isolation
+
+frontend : Exposition publique (Traefik → applications web)
+backend : Communication inter-services (bases de données)
+monitoring : Collecte de métriques (isolé)
+
+
+4. Stratégie de sauvegarde
+4.1 Types de sauvegardes
+4.1.1 Sauvegardes complètes (Full Backup)
+Fréquence : Quotidienne (2h du matin)
+Rétention : 30 jours
+Méthode : Duplicati avec chiffrement AES-256
+Contenu :
+
+Volumes Docker persistants
+Configurations (docker-compose.yml, configs/)
+Certificats SSL
+Snapshots bases de données
+
+4.1.2 Sauvegardes incrémentielles
+Fréquence : Toutes les 6 heures
+Rétention : 7 jours
+Méthode : Duplicati (incrémental)
+4.1.3 Sauvegardes applicatives
+GLPI (MariaDB)
+bash# Backup quotidien via cron dans le conteneur
+0 1 * * * mysqldump -u root -p${MYSQL_ROOT_PASSWORD} glpi | gzip > /backups/glpi_$(date +\%Y\%m\%d).sql.gz
+Elasticsearch
+bash# Snapshot API vers repository partagé
+curl -X PUT "elasticsearch-master:9200/_snapshot/backup_repo/snapshot_$(date +\%Y\%m\%d)"
+Cassandra
+bash# Snapshot via nodetool
+nodetool snapshot -t snapshot_$(date +\%Y\%m\%d)
+4.2 Localisation des sauvegardes
+4.2.1 Stockage primaire
+
+Emplacement : Serveur local dans /opt/backups
+Capacité : 1TB minimum
+Protection : RAID 1 ou RAID 5
+
+4.2.2 Stockage secondaire (hors site)
+
+Emplacement : Cloud S3-compatible (MinIO, AWS S3, BackBlaze B2)
+Synchronisation : Duplicati → Cloud (chiffré)
+Bande passante : Planifiée hors heures de pointe
+
+4.2.3 Stockage tertiaire (optionnel)
+
+Emplacement : Bandes magnétiques ou stockage glacé
+Fréquence : Mensuelle
+Rétention : 12 mois
+
+4.3 Configuration Duplicati
+yaml# Politique de sauvegarde Duplicati
+Backup Schedule:
+  - Full: Daily at 02:00 (keep 30 days)
+  - Incremental: Every 6h (keep 7 days)
+  
+Encryption: AES-256
+Compression: True
+Deduplication: True
+Block size: 100KB
+
+Destinations:
+  - Primary: /backups/data
+  - Remote: s3://backup-bucket/bigdata-prod
+  
+Notification:
+  - Email on failure
+  - Webhook to monitoring
+4.4 Procédure de sauvegarde manuelle
+En cas de maintenance ou changement majeur :
+bash#!/bin/bash
+# backup-manual.sh
+
+BACKUP_DATE=$(date +%Y%m%d_%H%M%S)
+BACKUP_DIR="/opt/backups/manual/$BACKUP_DATE"
+
+# Créer répertoire de sauvegarde
+mkdir -p $BACKUP_DIR
+
+# 1. Sauvegarder configurations
+cp -r /opt/docker/bigdata-infra $BACKUP_DIR/config
+
+# 2. Backup GLPI/MariaDB
+docker exec glpi_db_master mysqldump -u root -p${MYSQL_ROOT_PASSWORD} \
+  --all-databases | gzip > $BACKUP_DIR/mariadb_full.sql.gz
+
+# 3. Snapshot Elasticsearch
+curl -X PUT "localhost:9200/_snapshot/manual_repo/snapshot_$BACKUP_DATE"
+
+# 4. Snapshot Cassandra
+docker exec cassandra-seed nodetool snapshot -t manual_$BACKUP_DATE
+
+# 5. Exporter volumes Docker critiques
+docker run --rm -v glpi_data:/source -v $BACKUP_DIR:/backup \
+  alpine tar czf /backup/glpi_data.tar.gz -C /source .
+
+docker run --rm -v grafana_data:/source -v $BACKUP_DIR:/backup \
+  alpine tar czf /backup/grafana_data.tar.gz -C /source .
+
+# 6. Créer manifeste
+cat > $BACKUP_DIR/manifest.txt <<EOF
+Backup Date: $BACKUP_DATE
+Infrastructure: Big Data Platform
+Components: GLPI, Elasticsearch, Cassandra, Grafana
+Type: Manual Full Backup
+EOF
+
+echo "Backup completed: $BACKUP_DIR"
+4.5 Vérification des sauvegardes
+Automatique (quotidien) :
+
+Duplicati vérifie l'intégrité après chaque backup
+Alertes Prometheus si échec
+
+Manuelle (mensuelle) :
+
+Restauration de test sur environnement staging
+Vérification de l'intégrité des données
+Test de démarrage de tous les services
+Documentation des anomalies
+
+
+5. Procédures de reprise
+5.1 Scénarios de sinistre
+5.1.1 Classification des incidents
+NiveauDescriptionExemplesActionP1 - CRITIQUEService indisponible, impact business majeurPanne totale infrastructureActivation PRA immédiateP2 - MAJEURDégradation significativeCluster Elasticsearch degradéProcédure HA, surveillance accrueP3 - MINEURImpact limitéUn conteneur redémarreAuto-healing, investigationP4 - INFOPas d'impactAlerte métriqueMonitoring, action préventive
+5.2 Procédure de reprise complète (Sinistre P1)
+Phase 1 : Évaluation et préparation (15 min)
+bash# 1. Évaluer l'état de l'infrastructure
+docker ps -a
+docker volume ls
+df -h
+
+# 2. Vérifier la disponibilité des sauvegardes
+ls -lh /opt/backups/data/
+duplicati-cli list-backups
+
+# 3. Préparer l'environnement
+cd /opt/docker/bigdata-infra
+git pull origin main  # Si configuration versionnée
+Phase 2 : Restauration de l'infrastructure de base (30 min)
+bash#!/bin/bash
+# restore-infrastructure.sh
+
+echo "=== RESTAURATION INFRASTRUCTURE - PHASE 2 ==="
+
+# 1. Arrêter tous les conteneurs existants
+docker-compose down -v
+
+# 2. Nettoyer les volumes corrompus (ATTENTION !)
+# À n'effectuer QUE si corruption confirmée
+# docker volume rm $(docker volume ls -q)
+
+# 3. Recréer les réseaux
+docker network create frontend
+docker network create backend
+docker network create monitoring
+
+# 4. Restaurer les volumes depuis backup
+RESTORE_DATE=${1:-latest}  # Date du backup ou 'latest'
+BACKUP_PATH="/opt/backups/data/$RESTORE_DATE"
+
+# Volume GLPI
+docker volume create glpi_data
+docker run --rm -v glpi_data:/target -v $BACKUP_PATH:/backup \
+  alpine tar xzf /backup/glpi_data.tar.gz -C /target
+
+# Volume Grafana
+docker volume create grafana_data
+docker run --rm -v grafana_data:/target -v $BACKUP_PATH:/backup \
+  alpine tar xzf /backup/grafana_data.tar.gz -C /target
+
+echo "Phase 2 terminée - Volumes restaurés"
+Phase 3 : Restauration des bases de données (45 min)
+bash#!/bin/bash
+# restore-databases.sh
+
+echo "=== RESTAURATION BASES DE DONNÉES - PHASE 3 ==="
+
+BACKUP_DATE=${1:-$(date +%Y%m%d)}
+
+# 1. Démarrer MariaDB en mode restauration
+docker-compose up -d glpi_db_master
+sleep 30  # Attendre initialisation
+
+# 2. Restaurer dump GLPI
+echo "Restauration GLPI database..."
+gunzip < /opt/backups/data/glpi_${BACKUP_DATE}.sql.gz | \
+  docker exec -i glpi_db_master mysql -u root -p${MYSQL_ROOT_PASSWORD}
+
+# 3. Vérifier restauration MariaDB
+docker exec glpi_db_master mysql -u root -p${MYSQL_ROOT_PASSWORD} \
+  -e "SELECT COUNT(*) FROM glpi.glpi_tickets;"
+
+# 4. Démarrer cluster Elasticsearch
+docker-compose up -d elasticsearch-master elasticsearch-data1 elasticsearch-data2
+echo "Attente démarrage Elasticsearch (2 min)..."
+sleep 120
+
+# 5. Vérifier cluster Elasticsearch
+curl -X GET "localhost:9200/_cluster/health?pretty"
+
+# 6. Restaurer snapshot Elasticsearch
+curl -X POST "localhost:9200/_snapshot/backup_repo/snapshot_${BACKUP_DATE}/_restore" \
+  -H 'Content-Type: application/json' \
+  -d '{"indices": "*", "ignore_unavailable": true}'
+
+# 7. Démarrer cluster Cassandra
+docker-compose up -d cassandra-seed
+sleep 60
+docker-compose up -d cassandra-node1 cassandra-node2
+echo "Attente initialisation Cassandra (3 min)..."
+sleep 180
+
+# 8. Vérifier cluster Cassandra
+docker exec cassandra-seed nodetool status
+
+# 9. Restaurer snapshots Cassandra
+docker exec cassandra-seed nodetool refresh -- system snapshot_${BACKUP_DATE}
+
+echo "Phase 3 terminée - Bases de données restaurées"
+Phase 4 : Redémarrage des services applicatifs (30 min)
+bash#!/bin/bash
+# restore-services.sh
+
+echo "=== RESTAURATION SERVICES - PHASE 4 ==="
+
+# 1. Démarrer Traefik (pare-feu/proxy)
+docker-compose up -d traefik
+sleep 15
+
+# 2. Démarrer GLPI
+docker-compose up -d glpi
+sleep 30
+
+# 3. Démarrer Kibana
+docker-compose up -d kibana
+sleep 45
+
+# 4. Démarrer stack monitoring
+docker-compose up -d prometheus node-exporter cadvisor \
+  elasticsearch-exporter grafana
+
+# 5. Démarrer services support
+docker-compose up -d duplicati healthcheck
+
+# 6. Vérifier tous les services
+docker-compose ps
+
+echo "Phase 4 terminée - Services démarrés"
+Phase 5 : Validation et tests (30 min)
+bash#!/bin/bash
+# validate-restoration.sh
+
+echo "=== VALIDATION RESTAURATION - PHASE 5 ==="
+
+ERRORS=0
+
+# 1. Test connectivité Traefik
+echo "Test Traefik..."
+curl -f http://localhost:80 || ((ERRORS++))
+
+# 2. Test GLPI
+echo "Test GLPI..."
+curl -f http://glpi.local/ || ((ERRORS++))
+
+# 3. Test Elasticsearch
+echo "Test Elasticsearch..."
+HEALTH=$(curl -s http://localhost:9200/_cluster/health | jq -r '.status')
+if [ "$HEALTH" != "green" ] && [ "$HEALTH" != "yellow" ]; then
+  echo "ERREUR: Elasticsearch cluster status: $HEALTH"
+  ((ERRORS++))
+fi
+
+# 4. Test Cassandra
+echo "Test Cassandra..."
+docker exec cassandra-seed nodetool status | grep -q "UN" || ((ERRORS++))
+
+# 5. Test Grafana
+echo "Test Grafana..."
+curl -f http://localhost:3000/api/health || ((ERRORS++))
+
+# 6. Test Prometheus
+echo "Test Prometheus..."
+curl -f http://localhost:9090/-/healthy || ((ERRORS++))
+
+# 7. Vérifier données GLPI
+echo "Test données GLPI..."
+TICKET_COUNT=$(docker exec glpi_db_master mysql -u root -p${MYSQL_ROOT_PASSWORD} \
+  -Nse "SELECT COUNT(*) FROM glpi.glpi_tickets;")
+echo "Nombre de tickets restaurés: $TICKET_COUNT"
+
+# 8. Vérifier indices Elasticsearch
+echo "Test indices Elasticsearch..."
+curl -s "localhost:9200/_cat/indices?v"
+
+# 9. Résumé
+if [ $ERRORS -eq 0 ]; then
+  echo "✓ VALIDATION RÉUSSIE - Tous les tests passés"
+  echo "Infrastructure opérationnelle"
+else
+  echo "✗ VALIDATION ÉCHOUÉE - $ERRORS erreur(s) détectée(s)"
+  echo "Investigation requise"
+fi
+
+# 10. Générer rapport
+cat > /tmp/restoration_report.txt <<EOF
+=== RAPPORT DE RESTAURATION ===
+Date: $(date)
+Backup utilisé: $BACKUP_DATE
+Erreurs: $ERRORS
+Statut: $([ $ERRORS -eq 0 ] && echo "SUCCÈS" || echo "ÉCHEC")
+
+Services validés:
+- Traefik: OK
+- GLPI: OK
+- Elasticsearch: $HEALTH
+- Cassandra: OK
+- Grafana: OK
+- Prometheus: OK
+
+Prochaines actions:
+- Surveillance accrue pendant 24h
+- Vérification des sauvegardes
+- Communication aux utilisateurs
+EOF
+
+cat /tmp/restoration_report.txt
+5.3 Procédures de reprise par composant
+5.3.1 Restauration GLPI uniquement
+bash#!/bin/bash
+# restore-glpi-only.sh
+
+echo "Restauration GLPI uniquement..."
+
+# Arrêter GLPI
+docker-compose stop glpi glpi_db_master
+
+# Restaurer base de données
+BACKUP_DATE=${1:-$(date +%Y%m%d)}
+gunzip < /opt/backups/data/glpi_${BACKUP_DATE}.sql.gz | \
+  docker exec -i glpi_db_master mysql -u root -p${MYSQL_ROOT_PASSWORD}
+
+# Redémarrer
+docker-compose start glpi_db_master
+sleep 15
+docker-compose start glpi
+
+echo "GLPI restauré - RTO: 15 minutes"
+5.3.2 Restauration cluster Elasticsearch
+bash#!/bin/bash
+# restore-elasticsearch.sh
+
+echo "Restauration cluster Elasticsearch..."
+
+# 1. Arrêter cluster
+docker-compose stop elasticsearch-master elasticsearch-data1 elasticsearch-data2 kibana
+
+# 2. Nettoyer données (si corruption)
+# docker volume rm elasticsearch_data1 elasticsearch_data2 elasticsearch_data3
+
+# 3. Redémarrer cluster
+docker-compose up -d elasticsearch-master
+sleep 60
+docker-compose up -d elasticsearch-data1 elasticsearch-data2
+sleep 120
+
+# 4. Vérifier santé
+curl "localhost:9200/_cluster/health?pretty"
+
+# 5. Restaurer snapshot
+SNAPSHOT_DATE=${1:-$(date +%Y%m%d)}
+curl -X POST "localhost:9200/_snapshot/backup_repo/snapshot_${SNAPSHOT_DATE}/_restore"
+
+# 6. Redémarrer Kibana
+docker-compose up -d kibana
+
+echo "Elasticsearch restauré - RTO: 30 minutes"
+5.3.3 Restauration cluster Cassandra
+bash#!/bin/bash
+# restore-cassandra.sh
+
+echo "Restauration cluster Cassandra..."
+
+# 1. Arrêter cluster
+docker-compose stop cassandra-seed cassandra-node1 cassandra-node2
+
+# 2. Restaurer seed node
+docker-compose up -d cassandra-seed
+sleep 90
+
+# 3. Restaurer snapshot
+SNAPSHOT_DATE=${1:-$(date +%Y%m%d)}
+docker exec cassandra-seed nodetool refresh -- keyspace snapshot_${SNAPSHOT_DATE}
+
+# 4. Démarrer nœuds secondaires
+docker-compose up -d cassandra-node1
+sleep 60
+docker-compose up -d cassandra-node2
+sleep 60
+
+# 5. Vérifier cluster
+docker exec cassandra-seed nodetool status
+docker exec cassandra-seed nodetool repair
+
+echo "Cassandra restauré - RTO: 45 minutes"
+5.4 Procédures de basculement haute disponibilité
+5.4.1 Basculement nœud Elasticsearch
+bash# Si un nœud Elasticsearch tombe
+# 1. Le cluster continue avec 2 nœuds (tolérance de panne)
+
+# 2. Identifier le nœud défaillant
+curl "localhost:9200/_cat/nodes?v"
+
+# 3. Redémarrer le nœud
+docker-compose restart elasticsearch-data1  # ou data2
+
+# 4. Vérifier réintégration
+curl "localhost:9200/_cat/health?v"
+
+# Le cluster se rééquilibre automatiquement
+5.4.2 Basculement nœud Cassandra
+bash# Si un nœud Cassandra tombe
+# Le cluster continue avec QUORUM (2/3 nœuds)
+
+# 1. Identifier le nœud down
+docker exec cassandra-seed nodetool status
+
+# 2. Redémarrer le nœud
+docker-compose restart cassandra-node1  # ou node2
+
+# 3. Attendre rejoin automatique
+sleep 120
+
+# 4. Vérifier et réparer
+docker exec cassandra-seed nodetool status
+docker exec cassandra-seed nodetool repair
+5.5 Restauration après corruption de données
+Détection de corruption
+bash#!/bin/bash
+# check-data-integrity.sh
+
+echo "=== VÉRIFICATION INTÉGRITÉ DONNÉES ==="
+
+# MariaDB
+docker exec glpi_db_master mysqlcheck -u root -p${MYSQL_ROOT_PASSWORD} \
+  --all-databases --check --extended
+
+# Elasticsearch
+curl "localhost:9200/_cluster/health?level=indices&pretty"
+
+# Cassandra
+docker exec cassandra-seed nodetool verify
+
+# Volumes Docker
+docker run --rm -v glpi_data:/data alpine sh -c "cd /data && find . -type f -exec sha256sum {} \;"
+Procédure de restauration sélective
+bash#!/bin/bash
+# restore-selective.sh
+
+# Restaurer uniquement les données corrompues
+# Exemple: restaurer un keyspace Cassandra spécifique
+
+KEYSPACE="analytics"
+BACKUP_DATE=$1
+
+# 1. Exporter données actuelles (backup de sécurité)
+docker exec cassandra-seed cqlsh -e "COPY ${KEYSPACE}.table TO '/tmp/current_data.csv'"
+
+# 2. Drop keyspace corrompu
+docker exec cassandra-seed cqlsh -e "DROP KEYSPACE IF EXISTS ${KEYSPACE};"
+
+# 3. Restaurer depuis snapshot
+docker exec cassandra-seed nodetool refresh -- ${KEYSPACE} snapshot_${BACKUP_DATE}
+
+# 4. Vérifier
+docker exec cassandra-seed cqlsh -e "DESCRIBE KEYSPACE ${KEYSPACE};"
+
+6. Tests et maintenance
+6.1 Plan de tests du PRA
+6.1.1 Tests trimestriels (Q1, Q2, Q3, Q4)
+Objectif : Valider la procédure complète de restauration
+Déroulement :
+
+Planification (1 semaine avant)
+
+Notification équipes
+Préparation environnement test
+Vérification sauvegardes disponibles
+
+
+Exécution (fenêtre de maintenance - 4h)
+
+Simulation panne complète sur environnement staging
+Application procédure PRA complète
+Chronométrage de chaque phase
+Documentation des problèmes
+
+
+Rapport (1 semaine après)
+
+Analyse des écarts RTO/RPO
+Actions correctives
+Mise à jour PRA
+
+
+
+Template de rapport :
+=== RAPPORT TEST PRA ===
+Date: [DATE]
+Environnement: Staging
+Durée totale: [DURÉE]
+
+Résultats par phase:
+- Phase 1 (Évaluation): [TEMPS] / 15min objectif
+- Phase 2 (Infrastructure): [TEMPS] / 30min objectif
+- Phase 3 (Databases): [TEMPS] / 45min objectif
+- Phase 4 (Services): [TEMPS] / 30min objectif
+- Phase 5 (Validation): [TEMPS] / 30min objectif
+
+RTO respectés: [OUI/NON]
+RPO respectés: [OUI/NON]
+
+Problèmes rencontrés:
+1. [DESCRIPTION]
+2. [DESCRIPTION]
+
+Actions correctives:
+1. [ACTION] - Responsable: [NOM] - Échéance: [DATE]
+2. [ACTION] - Responsable: [NOM] - Échéance: [DATE]
+6.1.2 Tests mensuels partiels
+Tests de sauvegarde :
+bash# test-backup-monthly.sh
+# Exécuté le 1er de chaque mois
+
+# 1. Vérifier la dernière sauvegarde
+duplicati-cli test-backup
+
+# 2. Restaurer un échantillon de données
+# Restaurer 1 volume sur environnement test
+docker volume create test_glpi_data
+docker run --rm -v test_glpi_data:/target -v /opt/backups:/backup \
+  alpine tar xzf /backup/data/latest/glpi_data.tar.gz -C /target
+
+# 3. Valider intégrité
+docker run --rm -v test_glpi_data:/data alpine find /data -type f | wc -l
+
+# 4. Nettoyer
+docker volume rm test_glpi_data
+6.1.3 Tests hebdomadaires automatiques
+Healthchecks automatiques :
+
+Autoheal vérifie continuellement l'état des conteneurs
+Prometheus alerte en cas d'anomalie
+Tests de connectivité automatisés
+
+6.2 Maintenance préventive
+6.2.1 Tâches hebdomadaires
+bash#!/bin/bash
+# maintenance-weekly.sh
+# À exécuter chaque lundi matin
+
+echo "=== MAINTENANCE HEBDOMADAIRE ==="
+
+# 1. Vérifier espace disque
+df -h | grep -E "8[0-9]%|9[0-9]%|100%" && \
+  echo "ALERTE: Espace disque critique!"
+
+# 2. Nettoyer logs Docker anciens
+docker system prune -a --volumes --filter "until=168h" -f
+
+# 3. Vérifier santé des clusters
+curl -s "localhost:9200/_cluster/health" | jq .
+docker exec cassandra-seed nodetool status
+
+# 4. Rotation logs applicatifs
+find /var/log/docker -name "*.log" -mtime +30 -delete
+
+# 5. Vérifier certificats SSL
+docker exec traefik traefik healthcheck
+
+# 6. Test sauvegardes
+duplicati-cli verify latest
+
+echo "Maintenance hebdomadaire terminée"
+6.2.2 Tâches mensuelles
+bash#!/bin/bash
+# maintenance-monthly.sh
+
+echo "=== MAINTENANCE MENSUELLE ==="
+
+# 1. Mise à jour images Docker
+docker-compose pull
+docker-compose up -d
+
+# 2. Optimisation bases de données
+docker exec glpi_db_master mysqlcheck -u root -p${MYSQL_ROOT_PASSWORD} \
+  --all-databases --optimize
+
+# 3. Compaction Cassandra
+docker exec cassandra-seed nodetool compact
+
+# 4. Nettoyage indices Elasticsearch anciens
+curator --config /etc/curator/curator.yml /etc/curator/actions.yml
+
+# 5. Audit sécurité
+docker scan glpi
+docker scan elasticsearch-master
+
+# 6. Revue des alertes Prometheus
+# Export des alertes du mois pour analyse
+
+echo "Maintenance mensuelle terminée"
+6.3 Mise à jour du PRA
+Déclencheurs de mise à jour :
+
+Changement d'architecture
+Nouveau composant ajouté
+Résultat de test PRA
+Incident réel
+Changement d'équipe
+Tous les 6 mois minimum
+
+Processus de mise à jour :
+
+Identification du besoin
+Rédaction des modifications
+Revue par l'équipe technique
+Validation par le responsable infrastructure
+Communication aux équipes
+Mise à jour versionnée (Git)
+
+
+7. Contacts et escalade
+7.1 Équipe d'intervention
+RôleNomTéléphoneEmailDisponibilitéResponsable PRA[NOM]+33 X XX XX XX XX[email]24/7Admin Sys Principal[NOM]+33 X XX XX XX XX[email]24/7 (astreinte)Admin Sys Backup[NOM]+33 X XX XX XX XX[email]Heures ouvréesDBA[NOM]+33 X XX XX XX XX[email]Heures ouvréesResponsable Sécurité[NOM]+33 X XX XX XX XX[email]Sur appelDirecteur IT[NOM]+33 X XX XX XX XX[email]Sur escalade
+7.2 Contacts externes
+ServiceContactTéléphoneContratHébergeur[NOM][TEL]Support 24/7FAI[NOM][TEL]Hotline techniqueFournisseur backup[NOM][TEL]Support Premium
+7.3 Matrice d'escalade
+Incident P1 (Critique)
+├─ 0 min: Détection → Admin Sys astreinte
+├─ 15 min: Si non résolu → Responsable PRA
+├─ 30 min: Si non résolu → Équipe complète mobilisée
+├─ 1h: Si non résolu → Directeur IT informé
+└─ 2h: Si non résolu → Direction Générale informée
+
+Incident P2 (Majeur)
+├─ 0 min: Détection → Admin Sys astreinte
+├─ 30 min: Si non résolu → Responsable PRA
+└─ 2h: Si non résolu → Escalade P1
+
+Incident P3-P4
+└─ Traitement pendant heures ouvrées
+7.4 Communication de crise
+Parties prenantes à informer :
+
+Utilisateurs (via bannière GLPI)
+Management IT
+Métiers impactés
+Service communication (si externe)
+
+Templates de communication :
+Incident en cours :
+OBJET: [P1] Infrastructure Big Data - Indisponibilité en cours
+
+Nous vous informons d'un incident critique affectant l'infrastructure Big Data.
+
+Services impactés: [LISTE]
+Heure de début: [HEURE]
+Impact: [DESCRIPTION]
+Équipe mobilisée: Oui
+
+Actions en cours:
+- [ACTION 1]
+- [ACTION 2]
+
+Estimation de rétablissement: [DURÉE ou "En cours d'évaluation"]
+
+Prochaine communication: [HEURE]
+Rétablissement :
+OBJET: [RÉSOLU] Infrastructure Big Data - Services rétablis
+
+Les services sont à nouveau opérationnels.
+
+Durée de l'incident: [DURÉE]
+Cause identifiée: [DESCRIPTION]
+Données perdues: [OUI/NON] - RPO: [DURÉE]
+
+Actions correctives planifiées:
+- [ACTION 1] - Échéance: [DATE]
+- [ACTION 2] - Échéance: [DATE]
+
+Un rapport d'incident détaillé sera publié dans les 48h.
+
+8. Annexes
+8.1 Commandes utiles
+Diagnostic rapide
+bash# État global
+docker-compose ps
+docker stats --no-stream
+
+# Logs
+docker-compose logs --tail=100 -f [service]
+
+# Santé Elasticsearch
+curl "localhost:9200/_cluster/health?pretty"
+curl "localhost:9200/_cat/nodes?v"
+curl "localhost:9200/_cat/indices?v"
+
+# Santé Cassandra
+docker exec cassandra-seed nodetool status
+docker exec cassandra-seed nodetool info
+docker exec cassandra-seed nodetool tablestats
+
+# Santé MariaDB
+docker exec glpi_db_master mysqladmin -u root -p${MYSQL_ROOT_PASSWORD} status
+docker exec glpi_db_master mysql -u root -p${MYSQL_ROOT_PASSWORD} -e "SHOW SLAVE STATUS\G"
+
+# Métriques Prometheus
+curl "localhost:9090/api/v1/query?query=up"
+Commandes d'urgence
+bash# Arrêt d'urgence
+docker-compose down
+
+# Redémarrage forcé
+docker-compose restart
+
+# Nettoyage complet (DANGER!)
+docker-compose down -v
+docker system prune -a --volumes -f
+
+# Restauration express
+./restore-infrastructure.sh latest
+./restore-databases.sh latest
+./restore-services.sh
+./validate-restoration.sh
+8.2 Checklist pré-restauration
+
+ Sauvegardes vérifiées et accessibles
+ Espace disque suffisant (minimum 50% libre)
+ Équipe d'intervention mobilisée
+ Communication aux utilisateurs effectuée
+ Environnement de test prêt (si test)
+ Documentation PRA à portée de main
+ Accès administrateur confirmés
+ Logs système activés pour traçabilité
+
+8.3 Checklist post-restauration
+
+ Tous les services démarrés
+ Tests fonctionnels passés
+ Données vérifiées (échantillon)
+ Monitoring opérationnel
+ Sauvegardes relancées
+ Équipes informées du rétablissement
+ Rapport d'incident rédigé
+ Post-mortem planifié
+ Actions correctives documentées
+ PRA mis à jour si nécessaire
+
+8.4 Métriques de surveillance continue
+Indicateurs clés (KPI) :
+
+Disponibilité services : > 99.9%
+Temps de réponse GLPI : < 2s
+Latence Elasticsearch : < 100ms
+Latence Cassandra : < 10ms
+Succès sauvegardes : 100%
+Espace disque utilisé : < 80%
+
+Alertes critiques Prometheus :
+yamlgroups:
+  - name: infrastructure_critical
+    rules:
+      - alert: ServiceDown
+        expr: up == 0
+        for: 5m
+        annotations:
+          summary: "Service {{ $labels.job }} is down"
+          
+      - alert: HighDiskUsage
+        expr: (node_filesystem_avail_bytes / node_filesystem_size_bytes) < 0.2
+        for: 10m
+        
+      - alert: ElasticsearchClusterRed
+        expr: elasticsearch_cluster_health_status{color="red"} == 1
+        for: 5m
+        
+      - alert: CassandraNodeDown
+        expr: cassandra_node_up == 0
+        for: 5m
+8.5 Glossaire
+RTO (Recovery Time Objective) : Durée maximale acceptable pendant laquelle un système peut être indisponible après un sinistre.
+RPO (Recovery Point Objective) : Quantité maximale acceptable de données qu'une organisation peut se permettre de perdre mesurée en temps.
+HA (High Availability) : Architecture conçue pour minimiser les temps d'arrêt et assurer la continuité de service.
+Snapshot : Copie instantanée de l'état d'un système à un moment donné.
+Cluster : Groupe de serveurs travaillant ensemble pour fournir une haute disponibilité et une meilleure performance.
+Réplication : Processus de copie des données sur plusieurs nœuds pour garantir la redondance.
+Failover : Basculement automatique vers un système de secours en cas de défaillance.
+
+FIN DU DOCUMENT PRA
+Version: 1.0
+Dernière mise à jour: Octobre 2025
+Prochaine revue: Avril 2026

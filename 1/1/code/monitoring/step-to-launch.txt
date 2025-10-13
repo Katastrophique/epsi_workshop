@@ -1,0 +1,5 @@
+
+1. apt update -y && apt upgrade -y 
+2. apt install docker-compose 
+3. create "docker-compose.yml" and "monitoring/prometheus.yml" files
+4. docker-compose up -d 

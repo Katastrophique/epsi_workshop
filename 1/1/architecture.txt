@@ -1,0 +1,304 @@
+# Documentation complète — Infrastructure Dockerisée BigData
+
+> Document détaillant l'architecture, la configuration et la justification de chaque composant du `docker-compose.yml` fourni. Ce document vise à être réutilisable comme livrable professionnel.
+
+---
+
+## 1. Résumé exécutif
+
+Cette infrastructure dockerisée regroupe les composants nécessaires pour un projet Big Data :
+
+* **Ticketing** : GLPI (service applicatif) avec MariaDB
+* **Historisation / recherche** : Elasticsearch + Kibana
+* **Monitoring** : Prometheus + Grafana (+ exporters)
+* **Datalake** : Cassandra (cluster 3 nœuds)
+* **Pare-feu / reverse-proxy** : Traefik
+* **Sauvegardes** : Duplicati
+* **Système de contrôle santé / autoheal** : autoheal
+
+Les objectifs : haute disponibilité (HA) des données critiques, monitoring clair, séparation réseau (frontend/backend/monitoring), sauvegardes automatisées et documentation complète.
+
+---
+
+## 2. Diagramme logique (texte)
+
+```
+Internet
+  |
+ Traefik (front proxy / firewall)  <--- réseau frontend ------> Services exposés (GLPI, Kibana, Grafana, Duplicati)
+  |
+  +-- réseau monitoring <--> Prometheus, node-exporter, cadvisor, exporters, traefik metrics
+
+Réseau backend (isolé) : Elasticsearch cluster (master + data nodes), Cassandra cluster (seed + nodes), MariaDB (GLPI DB)
+
+Volumes persistants montés sur l'hôte (Docker Volumes) pour données applicatives et sauvegardes.
+```
+
+---
+
+## 3. Inventaire des réseaux et volumes
+
+### Réseaux
+
+* **frontend** : réseau exposé via Traefik. Contient services publics (GLPI, Grafana, Kibana, Duplicati)
+* **backend** : réseau interne pour services back-end (Elasticsearch, Cassandra, MariaDB). Non routable depuis l'extérieur par Traefik par défaut.
+* **monitoring** : réseau pour Prometheus et exporters; permet à Prometheus de scrapper les métriques depuis l'ensemble des services.
+
+Raisonnement : séparation des plans de données (frontend/backend) pour limiter la surface d'attaque et séparer la communication utilisateur/administration de la communication inter-services.
+
+### Volumes (persistants)
+
+Liste des volumes Docker déclarés et leur usage :
+
+* `glpi_data` : fichiers et pièces jointes GLPI
+* `glpi_db` : données MariaDB de GLPI
+* `elasticsearch_data1/2/3` : données de chaque nœud elasticsearch
+* `cassandra_data1/2/3` : données des nœuds Cassandra
+* `prometheus_data` : time series data Prometheus
+* `grafana_data` : dashboards et DB Grafana
+* `traefik_certs` : stockage ACME (acme.json)
+
+Conseil : backup régulier hors-site des volumes (voir section Sauvegardes).
+
+---
+
+## 4. Services — description et configuration
+
+> Pour chaque service : image, rôle, ports exposés, volumes, variables critiques, dépendances et checks de santé.
+
+### 4.1 Traefik (pare-feu / reverse-proxy)
+
+* **Image** : `traefik:v2.10`
+* **Rôle** : reverse-proxy TLS, gestion des certificats ACME (Let's Encrypt), façade HTTP/HTTPS et dashboard.
+* **Ports exposés** : 80, 443, 8080 (dashboard)
+* **Volumes** : `/var/run/docker.sock` (découverte automatique des conteneurs), `traefik_certs` pour ACME storage
+* **Labels** : routage des services (ex : `traefik.enable=true`, règles Host)
+* **Sécurité** : expose le dashboard sur `traefik.local` — à restreindre en production (auth basic / IP whitelist / réseau privé)
+* **Monitoring** : `--metrics.prometheus=true` --> Prometheus peut scrapper Traefik
+* **Justification** : Traefik centralise TLS, simplifie le routage, et agit comme première ligne de défense (WAF non inclus). Pour un vrai WAF, ajouter ModSecurity ou un WAF cloud.
+
+**Remarques/Améliorations** :
+
+* Protéger le dashboard (middleware auth/basic) ou l'exposer sur un réseau admin privé.
+* En production HA, exécuter Traefik en plusieurs réplicas (Swarm/Kubernetes) ou front-load balancer (cloud LB) devant Traefik.
+
+### 4.2 GLPI (ticketing)
+
+* **Image** : `diouxx/glpi:latest`
+* **Ports** : service interne (80), routé par Traefik via `glpi.local`
+* **Dépendance DB** : `glpi_db_master` (MariaDB)
+* **Data** : `glpi_data` volume
+* **Healthcheck** : test HTTP sur racine
+
+**Remarques** :
+
+* Actuellement DB en mode `master` unique. Pour HA réelle, prévoir réplicas MySQL/MariaDB (master + replicas) ou MariaDB Galera cluster.
+* Assurer sauvegardes régulières de la DB et des fichiers (voir Duplicati).
+
+### 4.3 MariaDB (glpi_db_master)
+
+* **Image** : `mariadb:10.11`
+* **Variables** : root password, utilisateur `glpi`, paramètres de réplication (variables d'environnement pour réplication)
+* **Volume** : `glpi_db`
+* **Healthcheck** : `mysqladmin ping`
+
+**Remarques** :
+
+* Le compose actuel configure une instance unique. Pour HA/cohérence, utiliser :
+
+  * MariaDB Galera (multi-master) ou
+  * MySQL/MariaDB primary-replica avec failover orchestré (MHA, Orchestrator), ou
+  * external DB managed (RDS, Cloud SQL) en production.
+
+### 4.4 Elasticsearch (master + data nodes)
+
+* **Images** : `docker.elastic.co/elasticsearch/elasticsearch:8.11.0`
+* **Rôles** : `elasticsearch-master` (master), `elasticsearch-data1/2` (data/ingest)
+* **Configurations** : cluster.name, discovery.seed_hosts, initial_master_nodes, roles
+* **Volumes** : `elasticsearch_data1/2/3`
+* **Healthcheck** : cluster health via `/_cluster/health`
+
+**Remarques** :
+
+* `xpack.security.enabled=false` dans la config — notable pour un environnement de test. En production, activer la sécurité (TLS, auth) et créer utilisateurs dédiés.
+* Elasticsearch est gourmand en mémoire; ES_JAVA_OPTS fixé en conséquence. Veiller à laisser suffisamment de RAM sur l'hôte.
+* Pour HA : déjà 3 nœuds (1 master + 2 data) est un bon départ. Toutefois, la tolérance à la perte de master et quorum dépend des roles et settings.
+
+### 4.5 Kibana
+
+* **Image** : `kibana:8.11.0`
+* **Rôle** : UI pour Elasticsearch
+* **Routage** : exposé via Traefik `kibana.local`
+* **Dépendance** : elasticsearch-master
+
+### 4.6 Cassandra (datalake)
+
+* **Image** : `cassandra:4.1`
+* **Topology** : seed node `cassandra-seed`, + `cassandra-node1`, `cassandra-node2`
+* **Volumes** : cassandra_data1/2/3
+* **Variables** : cluster name, DC, RACK, snitch, heap sizing
+* **Healthcheck** : `nodetool status`
+
+**Remarques** :
+
+* Cassandra est conçue pour la haute disponibilité et la tolérance aux pannes. Trois nœuds offrent réplication et lecture/écriture sans point unique de défaillance.
+* Veiller aux configurations de replication factor (par exemple RF=3 pour tolérance complète avec 3 nœuds).
+
+### 4.7 Monitoring (Prometheus, Grafana, Exporters)
+
+* **Prometheus** : servira à scrapper node-exporter, cadvisor, elasticsearch-exporter, Traefik metrics, et éventuellement exporters pour Cassandra/MariaDB.
+
+  * Config file monté : `./monitoring/prometheus.yml`
+  * Data volume : `prometheus_data`
+* **Grafana** : dashboards, provisioning de datasources et dashboards avec répertoire `./monitoring/grafana-dashboards` et `grafana-datasources.yml`
+* **Exporters** : node-exporter (host metrics), cadvisor (container metrics), elasticsearch-exporter
+
+**Remarques** :
+
+* Prévoir exporters supplémentaires : `cassandra-exporter`, `mysqld_exporter` pour MariaDB, `glpi` specific metrics via application exporter si disponible.
+* Définir alerts (Alertmanager non présent — à ajouter) et routes d'alerte (e-mail, Slack, webhook).
+
+### 4.8 Duplicati (Backup)
+
+* **Image** : `duplicati/duplicati`
+* **Rôle** : orchestrer sauvegardes des volumes montés vers un backend (local, NAS, S3, remote storage)
+* **Volumes montés** : accès en lecture des sources des volumes clés
+
+**Remarques** :
+
+* Configurer jobs vers un stockage hors-site (S3, Wasabi, ou autre) pour résilience.
+* Chiffrer les sauvegardes (passphrase forte) et conserver retentions multiples (30+ jours, snapshot policy).
+
+### 4.9 Autoheal (healthcheck)
+
+* **Image** : `willfarrell/autoheal`
+* **Rôle** : auto-redémarrage des conteneurs marqués `AUTOHEAL_CONTAINER_LABEL`
+
+**Remarques** :
+
+* Utile pour redémarrage automatique mais ne remplace pas une orchestration sérieuse (Swarm/Kubernetes) qui gère l’auto-reconnaissance/placement.
+
+---
+
+## 5. Mesures de haute disponibilité incluses et limites
+
+### Incluses dans le compose fourni
+
+* **Cassandra** : cluster multi-nœuds (seed + 2) pour HA native
+* **Elasticsearch** : multiple nœuds (master + 2 data) pour distribution des shards
+* **Volumes persistants** : données persistées localement via volumes Docker
+* **Monitoring** : permet détecter et alerter sur incidents
+* **Traefik** : reverse proxy centralisé
+
+### Limitations & recommandations (important)
+
+* **Docker Compose n'est pas un orchestrateur HA complet** :
+
+  * Compose ne permet pas un placement intelligent ni distribution sur plusieurs hôtes.
+  * Pour une vraie HA production : migrer vers **Docker Swarm** (avec volumes distribués) ou **Kubernetes** (StatefulSets, PersistentVolumes, StorageClasses) ou utiliser des services managés cloud.
+* **Single point of failure** : Traefik, MariaDB (unique master) et Duplicati sont actuellement des SPoF. Prévoir réplication/failover.
+* **Sécurité Elasticsearch désactivée** (`xpack.security.enabled=false`) — à activer en production.
+
+---
+
+## 6. Sécurité et hardening
+
+### Réseau
+
+* Restreindre l'accès au réseau `backend` (pas d'exposition publique)
+* Restreindre Traefik dashboard à IPs admin ou via authentification basique
+
+### Authentification & chiffrement
+
+* Activer TLS entre nœuds Elasticsearch et Kibana (certificats internes)
+* Activer chiffrement pour les sauvegardes Duplicati
+* Ne pas garder de secrets en clair dans le `docker-compose.yml` — utiliser **secrets** Docker ou variables d'environnement via un gestionnaire (Vault, SSM, .env chiffré)
+
+### Utilisateurs et mots de passe
+
+* Remplacer mots de passe tests (`rootpassword`, `glpipassword`, `admin123`) par des mots de passe robustes stockés dans un store de secrets
+
+### Logs & Audit
+
+* Centraliser logs (ELK, Filebeat -> Elasticsearch) pour audit et investigation
+
+---
+
+## 7. Monitoring, alerting et dashboards proposés
+
+### Metrics à collecter (exemples)
+
+* **Node metrics** : CPU, mémoire, I/O, disk usage (node-exporter)
+* **Containers** : restarts, CPU/mem (cadvisor)
+* **Elasticsearch** : cluster health, unassigned shards, JVM mem, GC, indexing rate
+* **Cassandra** : liveness, pending compactions, tombstones, latency, throughput
+* **MariaDB/GLPI** : connections, slow queries, replication lag
+* **Traefik** : request rate, error rate, TLS cert expiry
+* **Backups** : last successful backup date, size, failed jobs
+
+### Alerts essentiels (exemples)
+
+* Node disk > 80%
+* Node memory > 85%
+* Elasticsearch cluster status != green
+* Cassandra node down / ring inconsistency
+* DB replication lag > seuil
+* Backup failed in last 24h
+
+**Remarque** : Ajouter Alertmanager pour gérer les routes/receivers (email, Slack, pagerduty).
+
+---
+
+## 8. Sauvegardes — stratégie recommandée (résumé)
+
+1. **Quoi sauvegarder** : données MariaDB (dumps réguliers), fichiers GLPI, volumes Elasticsearch (snapshots via SLM), Cassandra snapshots (`nodetool snapshot`) + commitlogs si besoin, Grafana (dashboards), Prometheus (optionnel)
+2. **Fréquence** :
+
+   * DB : dump quotidien (+ binlogs/point-in-time si possible)
+   * Elasticsearch : snapshots incrémentaux quotidiennement
+   * Cassandra : snapshots hebdomadaires + commitlog retention
+3. **Rétention** : au minimum 30 jours ; conserver rétention longue pour archivage (90—365 jours) selon exigences
+4. **Stockage** : sauvegardes hors-site (S3 compatible); chiffrées et versionnées
+5. **Tests** : procédure de restauration testée chaque mois sur environnement de staging
+
+**Implémentation dans compose** : Duplicati est présent ; configurer jobs ciblant :
+
+* dump MariaDB -> S3
+* snapshots Cassandra -> S3
+* elasticsearch snapshots via repository S3 (operator / API ES)
+
+---
+
+## 9. Procédure de documentation de la configuration (où trouver quoi)
+
+* **docker-compose.yml** : racine du projet — décrit la topologie et variables de base
+* **monitoring/prometheus.yml** : targets et scrape jobs
+* **monitoring/grafana-dashboards/** : JSON dashboards provisionnés
+* **backups/** : configuration locale de Duplicati et scripts d'automatisation
+* **README.md / ops-runbook.md** : procédures d'urgence (démarrage/arrêt, restauration)
+
+Inclure des exemples de commandes (voir section suivante).
+
+---
+
+## 10. Commandes d’exploitation utiles
+
+```
+# Démarrer l'infra
+docker compose up -d
+
+# Voir logs d'un service
+docker compose logs -f elasticsearch-master
+
+# Exécuter un shell dans un conteneur
+docker exec -it cassandra-node1 /bin/bash
+
+# Snapshot Cassandra
+docker exec cassandra-seed nodetool snapshot
+
+# Snapshot Elasticsearch (via API)
+curl -X PUT "http://elasticsearch-master:9200/_snapshot/my_backup/snapshot_1?wait_for_completion=true"
+
+# Backup MariaDB (dump)
+docker exec glpi_db_master sh -c 'exec mysqldump -u root -p"${MYSQL_ROOT_PASSWORD}" glpi' > glpi_dump.sql
+```
