@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Patronus EPSI - Bat Loader</title>
+    <style>
+        :root {
+            /* Palette élégante argentée */
+            --patronus-primary: #d8e8f5;
+            --patronus-secondary: #a8c8e1;
+            --patronus-glow: #5b8ab8;
+            --patronus-accent: #ffffff;
+            
+            /* Paramètres */
+            --loader-size: 160px;
+            --wing-beat-duration: 0.6s;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: radial-gradient(ellipse at center, #1a2942 0%, #0d1620 100%);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            overflow: hidden;
+        }
+
+        /* Effet lune en arrière-plan */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 10%;
+            right: 15%;
+            width: 200px;
+            height: 200px;
+            background: radial-gradient(circle, rgba(200, 220, 240, 0.15) 0%, transparent 70%);
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        /* Container principal */
+        .patronus-loader {
+            position: relative;
+            width: var(--loader-size);
+            height: var(--loader-size);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
+        }
+
+        /* Aura lumineuse pulsante */
+        .aura {
+            position: absolute;
+            inset: -40%;
+            border-radius: 50%;
+            background: radial-gradient(circle, var(--patronus-glow) 0%, transparent 60%);
+            opacity: 0.2;
+            animation: auraPulse 2s ease-in-out infinite;
+        }
+
+        @keyframes auraPulse {
+            0%, 100% { 
+                transform: scale(0.9); 
+                opacity: 0.15; 
+            }
+            50% { 
+                transform: scale(1.1); 
+                opacity: 0.3; 
+            }
+        }
+
+        /* Cercles magiques */
+        .magic-ring {
+            position: absolute;
+            border: 1px solid var(--patronus-secondary);
+            border-radius: 50%;
+            opacity: 0;
+            animation: ringExpand 3s ease-out infinite;
+        }
+
+        .magic-ring:nth-child(1) {
+            inset: -10%;
+            animation-delay: 0s;
+        }
+
+        .magic-ring:nth-child(2) {
+            inset: -10%;
+            animation-delay: 1.5s;
+        }
+
+        @keyframes ringExpand {
+            0% {
+                transform: scale(0.8);
+                opacity: 0.6;
+            }
+            70% {
+                opacity: 0.2;
+            }
+            100% {
+                transform: scale(1.5);
+                opacity: 0;
+            }
+        }
+
+        /* SVG Chauve-souris */
+        .patronus-bat {
+            width: 90%;
+            height: 90%;
+            filter: drop-shadow(0 0 15px var(--patronus-glow)) 
+                    drop-shadow(0 0 30px rgba(91, 138, 184, 0.4));
+            transform-origin: center center;
+            animation: batFloat 3s ease-in-out infinite;
+        }
+
+        @keyframes batFloat {
+            0%, 100% {
+                transform: translateY(0) scale(1);
+                opacity: 0.95;
+            }
+            50% {
+                transform: translateY(-8px) scale(1.02);
+                opacity: 1;
+            }
+        }
+
+        /* Animation des ailes - version plus agressive */
+        .wing-left, .wing-right {
+            /* utiliser view-box comme référence pour que l'origine soit relative à la vue SVG
+               ceci évite que les groupes "s'échappent" lorsque les paths sont loin de leur propre bbox */
+            -webkit-transform-box: view-box;
+            transform-box: view-box;
+            /* positionner l'origine sur (100,95) du viewBox -> 50% 47.5% */
+            -webkit-transform-origin: 50% 47.5%;
+            transform-origin: 50% 47.5%; /* point d'articulation proche du corps */
+            will-change: transform;
+            animation: wingBeat var(--wing-beat-duration) cubic-bezier(.35,.1,.2,1) infinite;
+        }
+
+        .wing-right {
+            animation-name: wingBeatRight;
+        }
+
+        /* Ailes plus pointues, battements plus amples */
+        @keyframes wingBeat {
+            0%, 100% {
+                transform: rotate(0deg) scaleX(1) scaleY(1);
+            }
+            50% {
+                transform: rotate(-20deg) scaleX(0.95) scaleY(1.08);
+            }
+        }
+
+        @keyframes wingBeatRight {
+            0%, 100% {
+                transform: rotate(0deg) scaleX(1) scaleY(1);
+            }
+            50% {
+                transform: rotate(20deg) scaleX(0.95) scaleY(1.08);
+            }
+        }
+
+        /* Traînée lumineuse */
+        .light-trail {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+
+        .trail-particle {
+            position: absolute;
+            width: 2px;
+            height: 2px;
+            background: var(--patronus-accent);
+            border-radius: 50%;
+            box-shadow: 0 0 4px var(--patronus-secondary);
+            opacity: 0;
+        }
+
+        .trail-particle:nth-child(1) {
+            top: 30%;
+            left: 20%;
+            animation: trailFade 2s ease-out infinite;
+        }
+
+        .trail-particle:nth-child(2) {
+            top: 35%;
+            left: 80%;
+            animation: trailFade 2s ease-out infinite 0.3s;
+        }
+
+        .trail-particle:nth-child(3) {
+            top: 50%;
+            left: 15%;
+            animation: trailFade 2s ease-out infinite 0.6s;
+        }
+
+        .trail-particle:nth-child(4) {
+            top: 50%;
+            left: 85%;
+            animation: trailFade 2s ease-out infinite 0.9s;
+        }
+
+        .trail-particle:nth-child(5) {
+            top: 65%;
+            left: 30%;
+            animation: trailFade 2s ease-out infinite 1.2s;
+        }
+
+        .trail-particle:nth-child(6) {
+            top: 70%;
+            left: 70%;
+            animation: trailFade 2s ease-out infinite 1.5s;
+        }
+
+        @keyframes trailFade {
+            0% { 
+                opacity: 0; 
+                transform: translateY(0) scale(1);
+            }
+            20% { 
+                opacity: 0.8;
+            }
+            80% {
+                opacity: 0.3;
+            }
+            100% { 
+                opacity: 0; 
+                transform: translateY(20px) scale(0.5);
+            }
+        }
+
+        /* Texte et progression */
+        .loading-container {
+            position: absolute;
+            bottom: -75px;
+            left: 50%;
+            transform: translateX(-50%);
+            text-align: center;
+            width: 220px;
+        }
+
+        .loading-text {
+            color: var(--patronus-secondary);
+            font-size: 12px;
+            font-weight: 500;
+            letter-spacing: 4px;
+            text-transform: uppercase;
+            margin-bottom: 14px;
+            opacity: 0.85;
+            animation: textPulse 2s ease-in-out infinite;
+        }
+
+        @keyframes textPulse {
+            0%, 100% { 
+                opacity: 0.7;
+            }
+            50% { 
+                opacity: 1;
+            }
+        }
+
+        /* Barre de progression élégante */
+        .progress-bar {
+            width: 100%;
+            height: 1.5px;
+            background: rgba(168, 200, 225, 0.15);
+            border-radius: 2px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .progress-fill {
+            position: absolute;
+            height: 100%;
+            width: 40%;
+            background: linear-gradient(90deg, 
+                transparent 0%, 
+                var(--patronus-glow) 50%, 
+                transparent 100%);
+            animation: progressMove 1.8s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+            box-shadow: 0 0 8px var(--patronus-glow);
+        }
+
+        @keyframes progressMove {
+            0% { 
+                left: -40%; 
+            }
+            100% { 
+                left: 100%; 
+            }
+        }
+
+        /* Points de progression */
+        .progress-dots {
+            display: flex;
+            justify-content: center;
+            gap: 6px;
+            margin-top: 10px;
+        }
+
+        .dot {
+            width: 4px;
+            height: 4px;
+            background: var(--patronus-secondary);
+            border-radius: 50%;
+            opacity: 0.3;
+            animation: dotPulse 1.8s ease-in-out infinite;
+        }
+
+        .dot:nth-child(2) { animation-delay: 0.2s; }
+        .dot:nth-child(3) { animation-delay: 0.4s; }
+        .dot:nth-child(4) { animation-delay: 0.6s; }
+        .dot:nth-child(5) { animation-delay: 0.8s; }
+
+        @keyframes dotPulse {
+            0%, 100% { 
+                opacity: 0.3;
+                transform: scale(1);
+            }
+            50% { 
+                opacity: 1;
+                transform: scale(1.3);
+            }
+        }
+
+        /* Accessibilité */
+        .sr-only {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border-width: 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="patronus-loader" role="status" aria-live="polite">
+        <!-- Aura lumineuse -->
+        <div class="aura"></div>
+        
+        <!-- Traînée lumineuse -->
+        <div class="light-trail">
+            <div class="trail-particle"></div>
+            <div class="trail-particle"></div>
+            <div class="trail-particle"></div>
+            <div class="trail-particle"></div>
+            <div class="trail-particle"></div>
+            <div class="trail-particle"></div>
+        </div>
+        
+        <!-- SVG Chauve-souris -->
+        <svg class="patronus-bat" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+                <linearGradient id="bodyGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                    <stop offset="0%" style="stop-color:var(--patronus-accent);stop-opacity:1" />
+                    <stop offset="100%" style="stop-color:var(--patronus-primary);stop-opacity:0.95" />
+                </linearGradient>
+                <linearGradient id="wingGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                    <stop offset="0%" style="stop-color:var(--patronus-secondary);stop-opacity:0.85" />
+                    <stop offset="50%" style="stop-color:var(--patronus-primary);stop-opacity:0.9" />
+                    <stop offset="100%" style="stop-color:var(--patronus-secondary);stop-opacity:0.85" />
+                </linearGradient>
+            </defs>
+            
+        <!-- Aile gauche - version plus agressive (pointes et nervures) -->
+        <g class="wing-left">
+      <!-- Forme principale : triangle pointu avec dentelures (statique — animation via rotation du groupe) -->
+      <path d="M100 95 L60 70 L30 88 L45 100 L35 115 L60 110 L80 105 Z"
+          fill="url(#wingGradient)" opacity="0.95"/>
+        <!-- Nervure/membrane interne accentuée -->
+      <path d="M90 98 L70 85 L50 96 L62 108 L78 104 Z"
+          fill="var(--patronus-accent)" opacity="0.35"/>
+        <!-- Quelques pointes supplémentaires pour accentuer le côté agressif -->
+        <path d="M50 96 L44 88 L52 92 Z" fill="rgba(0,0,0,0.08)" opacity="0.9"/>
+        <path d="M35 115 L28 108 L34 112 Z" fill="rgba(0,0,0,0.06)" opacity="0.9"/>
+        </g>
+            
+        <!-- Aile droite - version plus agressive (pointes et nervures) -->
+        <g class="wing-right">
+        <!-- Forme principale miroir, bien anguleuse -->
+      <path d="M100 95 L140 70 L170 88 L155 100 L165 115 L140 110 L120 105 Z"
+          fill="url(#wingGradient)" opacity="0.95"/>
+        <!-- Nervure/membrane interne accentuée -->
+      <path d="M110 98 L130 85 L150 96 L138 108 L122 104 Z"
+          fill="var(--patronus-accent)" opacity="0.35"/>
+        <!-- Pointes supplémentaires -->
+        <path d="M150 96 L156 88 L148 92 Z" fill="rgba(0,0,0,0.08)" opacity="0.9"/>
+        <path d="M165 115 L172 108 L166 112 Z" fill="rgba(0,0,0,0.06)" opacity="0.9"/>
+        </g>
+            
+            <!-- Corps central -->
+            <ellipse cx="100" cy="100" rx="8" ry="12" fill="url(#bodyGradient)" opacity="0.95"/>
+            
+            <!-- Tête -->
+            <ellipse cx="100" cy="88" rx="7" ry="8" fill="url(#bodyGradient)" opacity="0.95"/>
+            
+            <!-- Oreilles pointues -->
+            <path d="M 95 82 L 93 76 L 96 81 Z" fill="var(--patronus-primary)" opacity="0.9"/>
+            <path d="M 105 82 L 107 76 L 104 81 Z" fill="var(--patronus-primary)" opacity="0.9"/>
+            
+            <!-- Yeux lumineux -->
+            <circle cx="97" cy="88" r="1.5" fill="var(--patronus-glow)" opacity="0.95">
+                <animate attributeName="opacity" values="0.95;0.6;0.95" dur="3s" repeatCount="indefinite"/>
+            </circle>
+            <circle cx="103" cy="88" r="1.5" fill="var(--patronus-glow)" opacity="0.95">
+                <animate attributeName="opacity" values="0.95;0.6;0.95" dur="3s" repeatCount="indefinite"/>
+            </circle>
+            
+            <!-- Petites pattes -->
+            <line x1="97" y1="110" x2="97" y2="116" stroke="var(--patronus-secondary)" stroke-width="1.5" opacity="0.85"/>
+            <line x1="103" y1="110" x2="103" y2="116" stroke="var(--patronus-secondary)" stroke-width="1.5" opacity="0.85"/>
+        </svg>
+        
+        <!-- Zone de chargement -->
+        <div class="loading-container">
+            <div class="loading-text">GEEKSHAPE</div>
+            <div class="progress-bar">
+                <div class="progress-fill"></div>
+            </div>
+            <div class="progress-dots">
+                <div class="dot"></div>
+                <div class="dot"></div>
+                <div class="dot"></div>
+                <div class="dot"></div>
+                <div class="dot"></div>
+            </div>
+        </div>
+        
+        <!-- Accessibilité -->
+        <span class="sr-only">Chargement en cours, veuillez patienter</span>
+    </div>
+
+    <script>
+        // Configuration personnalisable
+        const loaderConfig = {
+            size: 160,
+            wingBeatSpeed: 0.6, // Vitesse battement d'ailes en secondes
+            colors: {
+                primary: '#d8e8f5',
+                secondary: '#a8c8e1',
+                glow: '#5b8ab8',
+                accent: '#ffffff'
+            }
+        };
+
+        function initPatronusLoader(config = {}) {
+            const merged = { ...loaderConfig, ...config };
+            const root = document.documentElement;
+            
+            root.style.setProperty('--loader-size', `${merged.size}px`);
+            root.style.setProperty('--wing-beat-duration', `${merged.wingBeatSpeed}s`);
+            
+            if (merged.colors) {
+                Object.entries(merged.colors).forEach(([key, value]) => {
+                    root.style.setProperty(`--patronus-${key}`, value);
+                });
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            initPatronusLoader();
+        });
+
+        // Fonction pour masquer le loader
+        function hideLoader() {
+            const loader = document.querySelector('.patronus-loader');
+            if (loader && loader.parentElement) {
+                loader.parentElement.style.transition = 'opacity 0.6s ease-out';
+                loader.parentElement.style.opacity = '0';
+                setTimeout(() => {
+                    if (loader.parentElement) {
+                        loader.parentElement.style.display = 'none';
+                    }
+                }, 600);
+            }
+        }
+
+        // Exemple d'utilisation
+        // window.addEventListener('load', () => { setTimeout(hideLoader, 3000); });
+    </script>
+</body>
+</html>
