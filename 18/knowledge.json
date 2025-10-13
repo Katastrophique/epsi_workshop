@@ -1,0 +1,99 @@
+{
+  "general": {
+    "nom": "EPSI Lyon",
+    "type": "École d'ingénierie informatique",
+    "ville": "Lyon, quartier Part-Dieu",
+    "description": "L'EPSI forme des experts en informatique et systèmes d'information depuis 1961. L'école délivre des diplômes reconnus par l'État (Bac+3 Bachelor, Bac+5 Mastère)."
+  },
+  "programmes": {
+    "bachelor": [
+      "Bachelor Développement (Bac+3)",
+      "Bachelor Infrastructure & Réseaux (Bac+3)",
+      "Bachelor Cybersécurité (Bac+3)"
+    ],
+    "mastere": [
+      "Mastère Expert en Informatique et Systèmes d'Information (Bac+5)",
+      "Mastère Architecture Logicielle (Bac+5)",
+      "Mastère Cybersécurité (Bac+5)"
+    ],
+    "modalites": "Formation en initial ou en alternance dès la 3ème année",
+    "duree": "Le Bachelor dure 3 ans, le Mastère 2 ans, pour un cursus complet de 5 ans."
+  },
+  "admission": {
+    "post_bac": "Candidature via Parcoursup ou directement sur le site EPSI",
+    "processus": "Étude du dossier + entretien de motivation",
+    "admissions_paralleles": "Possibilité d'intégrer en Bachelor 3 (Bac+2), Mastère 1 (Bac+3) ou Mastère 2 (Bac+4)",
+    "prerequis": "Bac général ou technologique (STI2D/STMG), passion pour l'informatique, motivation",
+    "rentree": "Rentrée principale en septembre, rentrée décalée possible en février",
+    "calendrier": "Année académique de septembre à juin, alternance 3 semaines entreprise / 1 semaine école"
+  },
+  "alternance": {
+    "debut": "Possible dès la 3ème année (Bachelor 3 ou Mastère 1)",
+    "rythme": "3 semaines en entreprise / 1 semaine à l'école",
+    "avantages": [
+      "Frais de scolarité pris en charge par l'entreprise",
+      "Salaire mensuel selon âge et niveau",
+      "Expérience professionnelle concrète",
+      "Facilite l'insertion professionnelle"
+    ]
+  },
+  "campus": {
+    "localisation": "Lyon Gorge de Loup, proche des transports (Métro D, bus 3/89/C4/3, gare SNCF Gorge de Loup)",
+    "equipements": [
+      "Salles informatiques équipées",
+      "Laboratoires réseaux et cybersécurité",
+      "Espaces coworking et salles de réunion",
+      "Logiciels professionnels fournis (JetBrains, Microsoft, Adobe, VMware)"
+    ],
+    "visite": "Visites possibles lors des journées portes ouvertes ou sur rendez-vous via le site"
+  },
+  "debouches": {
+    "metiers": [
+      "Développeur Full-Stack",
+      "DevOps Engineer",
+      "Architecte logiciel",
+      "Expert Cybersécurité",
+      "Data Engineer",
+      "Chef de projet IT",
+      "Consultant IT"
+    ],
+    "secteurs": [
+      "ESN (Capgemini, Sopra Steria, CGI)",
+      "Startups tech",
+      "Grands groupes",
+      "Banques et assurances",
+      "E-commerce"
+    ],
+    "taux_emploi": "95% des diplômés trouvent un emploi dans les 6 mois",
+    "salaire": "Bachelor 30-35K€ brut/an, Mastère 38-45K€ brut/an. Alternance rémunérée de 43% à 100% du SMIC"
+  },
+  "vie_etudiante": {
+    "bde": "Bureau Des Étudiants actif, organise soirées, week-end d'intégration et événements",
+    "associations": [
+      "Club cybersécurité",
+      "Club développement jeux vidéo",
+      "Club robotique",
+      "Association sportive"
+    ],
+    "evenements": [
+      "Hackathons et challenges de programmation",
+      "Conférences avec des professionnels",
+      "Projets collaboratifs en groupe",
+      "Soirées et tournois sportifs"
+    ],
+    "sport": "Association sportive et accès à de nombreuses salles de sport à proximité",
+    "integration": "Semaine d'intégration en début d'année avec activités et jeux pour souder les promotions"
+  },
+  "international": {
+    "stages": "Stages à l'étranger (Europe, Canada, USA, Asie)",
+    "echanges": "Échanges académiques avec universités partenaires",
+    "certifications": ["AWS", "Azure", "Cisco"],
+    "erasmus": "Partenariats avec universités étrangères, contactez le service international pour les destinations"
+  },
+  "financement": {
+    "alternance": "Frais pris en charge + salaire",
+    "bourse": "Bourses du CROUS selon revenus",
+    "aides": "Échelonnement des paiements, prêts étudiants à taux préférentiels",
+    "contact": "Service admissions pour plus d'informations"
+  }
+}
