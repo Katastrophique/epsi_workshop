@@ -1,0 +1,30 @@
+Je veux une pipeline CI/CD complète et fonctionnelle permettant d’assurer l’intégralité du processus d’intégration et de déploiement continu d’un projet.
+Cette pipeline devra être utilisable sur au moins un autre projet compatible, afin de valider le défi.
+
+Pour cette CI/CD, fournis :
+Le pipeline complet (ex. : YAML pour GitHub Actions, GitLab CI ou Jenkinsfile).
+Le détail étape par étape du fonctionnement de chaque bloc.
+Les commandes exactes exécutées pour :
+Le lancement des tests unitaires.
+Le lancement des tests de non-régression.
+La vérification du style de code (Airbnb pour projet JS / PEP8 pour projet Python).
+Le test de l’image Docker.
+La compilation du projet si nécessaire.
+L’analyse SonarQube et la vérification de la qualité du code.
+Le déploiement automatique du projet uniquement si toutes les étapes précédentes sont validées.
+Indique comment connecter cette CI/CD à un autre projet pour démontrer sa compatibilité.
+Retourne le tout sous forme de bloc YAML commenté, suivi d’un résumé explicatif clair.
+
+Assure-toi que toutes les commandes sont valides pour un environnement CI standard (GitHub Actions, GitLab CI, ou Jenkins).
+Vérifie que SonarQube est bien intégré (avec exemple de configuration de token et d’URL).
+Ne saute aucune étape : les tests, la qualité et le déploiement doivent être séquentiels et conditionnels.
+Mentionne clairement les dépendances nécessaires (Docker, Node/Python, SonarScanner…).
+
+Pour contexte :
+Je travaille sur plusieurs projets et je veux une CI/CD universelle, robuste et maintenable.
+L’objectif est de prouver que je maîtrise tout le processus, du test à la mise en production automatisée.
+Je veux que cette CI/CD soit simple à déployer, documentée, et capable de s’exécuter sur différents projets (Node.js ou Python).
+Elle doit refléter les bonnes pratiques DevOps, notamment :
+le contrôle qualité du code,
+la gestion d’erreurs propre,
+la reproductibilité, et la validation avant déploiement.
