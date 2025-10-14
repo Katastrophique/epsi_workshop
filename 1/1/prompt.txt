@@ -1,1 +1,27 @@
-Avec seulement des outils gratuit et open source, aide moi à faire ceci : Monter une infrastructure dockerisée complète pouvant supporter un projet big data comprenant : Un outil de ticketing (ex : GLPI) Un outil d’historisation de données (ex : ElasticSearch) Un outil de monitoring (ex : Grafana) Un datalake (ex : Cassandra) Un parefeu (applicatif ou non, pertinence du choix laissé à l’ apprenant) Des mesures de haute disponibilité. Rédaction d’ un document expliquant en détail les mesures de sauvegarde et de reprise d’ activité en cas de défaillance du système (PRA complet). L’ entièreté des configurations et de l’ architecture doit être documentée. Le choix des technologies est libre mais doit être cohérent et crédible dans un environnement professionnel. Il en va de même pour le monitoring, il doit être clair et permettre la surveillance de votre infrastructure, le choix des charts et le format des informations sont à votre discrétion
+Aide-moi à concevoir une infrastructure dockerisée complète et professionnelle pour un projet big data, en utilisant uniquement des outils gratuits et open source. L’infrastructure doit inclure :
+
+Un outil de ticketing (par exemple GLPI)
+
+Un outil d’historisation de données (par exemple Elasticsearch)
+
+Un outil de monitoring (par exemple Grafana)
+
+Un datalake (par exemple Cassandra)
+
+Un pare-feu applicatif ou réseau, avec justification du choix
+
+Des mesures de haute disponibilité pour tous les composants
+
+Pour cette infrastructure, fournis :
+
+Une architecture claire et documentée avec diagrammes et descriptions des services, conteneurs, volumes et réseaux Docker.
+
+Les configurations détaillées de chaque service, avec Docker Compose ou équivalent.
+
+Un plan complet de sauvegarde et de reprise d’activité (PRA), expliquant comment chaque service peut être restauré en cas de panne.
+
+Des recommandations sur le monitoring, incluant les métriques, les charts, et la configuration de Grafana pour surveiller l’ensemble de l’infrastructure.
+
+Justifie tes choix technologiques et explique leur cohérence dans un environnement professionnel.
+
+Génère les instructions de manière structurée et progressive pour qu’un apprenant puisse déployer et comprendre l’infrastructure sans ressources payantes.
