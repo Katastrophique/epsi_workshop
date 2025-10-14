@@ -1,0 +1,390 @@
+# .github/workflows/ci-cd.yaml
+name: Universal CI/CD (Node.js & Python)
+
+# Run on pushes to main and PRs. Add branches or tags as needed.
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+  workflow_dispatch:  # permet déclenchement manuel pour tests
+
+permissions:
+  contents: read
+  id-token: write   # si tu souhaites OIDC pour registre container cloud
+  # add other permissions if needed
+
+env:
+  # Default Sonar project key prefix (can be overridden per-repo via env)
+  SONAR_PROJECT_KEY: "${{ github.repository }}"  # exemple : owner/repo
+  #mettre la variable SONAR_HOST_URL et SONAR_TOKEN dans les Secrets du repo
+
+jobs:
+  # 1) Préparation : détecte si le repo contient Node.js et/ou Python
+  detect-language:
+    name: Detect project type (Node / Python)
+    runs-on: ubuntu-latest
+    outputs:
+      has_node: ${{ steps.check.outputs.has_node }}
+      has_python: ${{ steps.check.outputs.has_python }}
+      project_name: ${{ steps.check.outputs.project_name }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check repo for Node or Python files
+        id: check
+        run: |
+          # par défaut false
+          echo "has_node=false" >> $GITHUB_OUTPUT
+          echo "has_python=false" >> $GITHUB_OUTPUT
+          # project name
+          echo "project_name=${GITHUB_REPOSITORY##*/}" >> $GITHUB_OUTPUT
+
+          # detection simple : package.json -> Node, pyproject.toml OR requirements.txt -> Python
+          if [ -f package.json ]; then
+            echo "has_node=true" >> $GITHUB_OUTPUT
+          fi
+          if [ -f pyproject.toml ] || [ -f requirements.txt ] || [ -f setup.py ]; then
+            echo "has_python=true" >> $GITHUB_OUTPUT
+          fi
+
+  # 2) Node CI (s'exécute seulement si Node détecté)
+  node-ci:
+    name: Node.js CI
+    needs: detect-language
+    runs-on: ubuntu-latest
+    if: needs.detect-language.outputs.has_node == 'true'
+    strategy:
+      matrix:
+        node-version: [18.x]  # adapter versions si besoin
+    env:
+      CI: "true"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+
+      - name: Install dependencies (npm ci)
+        run: |
+          # Utilise npm ci pour reproductibilité si package-lock.json présent
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
+
+      - name: Run ESLint (Airbnb style) - exact command
+        # attente : projet doit avoir eslint configuré et extends "airbnb"
+        run: |
+          # installation locale si nécessaire
+          if ! command -v npx >/dev/null 2>&1; then npm install -g npm; fi
+          # commandes exactes (airbnb recommended) :
+          # Assumes project has an "lint" script OR eslint configured. We run either.
+          if npm run | grep -q "lint"; then
+            npm run lint
+          else
+            # eslint must be in devDependencies or install it temporarily
+            npx eslint . --ext .js,.jsx,.ts,.tsx
+          fi
+
+      - name: Run Unit Tests (exact command)
+        run: |
+          # standard: npm test (should be configured to use jest/mocha)
+          if npm run | grep -q "test"; then
+            npm test -- --ci --reporter=default
+          else
+            echo "No npm test script found. Skipping unit tests." && exit 1
+          fi
+
+      - name: Run Non-Regression Tests (exact command)
+        # Convention: script "regression" or folder tests/regression
+        run: |
+          if npm run | grep -q "regression"; then
+            npm run regression -- --ci
+          elif [ -d tests/regression ]; then
+            # example using jest (adjust if you use mocha)
+            npx jest tests/regression --ci
+          else
+            echo "No regression tests found. Skipping." && exit 0
+          fi
+
+      - name: Build / Compile (Node)
+        run: |
+          # If there's a build step (e.g. Next.js or bundler)
+          if npm run | grep -q "build"; then
+            npm run build
+          else
+            echo "No build step defined; skipping compile."
+          fi
+
+      - name: Upload node artifacts for later jobs (optional)
+        uses: actions/upload-artifact@v4
+        with:
+          name: node-artifacts
+          path: |
+            node_modules
+            build || true
+
+  # 3) Python CI (s'exécute seulement si Python détecté)
+  python-ci:
+    name: Python CI
+    needs: detect-language
+    runs-on: ubuntu-latest
+    if: needs.detect-language.outputs.has_python == 'true'
+    strategy:
+      matrix:
+        python-version: [3.11]
+    env:
+      CI: "true"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+
+      - name: Install dependencies (pip)
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          elif [ -f pyproject.toml ]; then
+            # pip + poetry or build tools: attempt pip install . or poetry
+            pip install .
+          else
+            echo "No requirements.txt or pyproject.toml found. Skipping dependency install." && exit 1
+          fi
+
+      - name: Lint with flake8 / pydocstyle (PEP8)
+        run: |
+          # Ensure flake8 is available (project should include it)
+          pip install flake8
+          # exact command PEP8: flake8 .
+          flake8 .
+
+      - name: Run unit tests (pytest) - exact command
+        run: |
+          # Assume pytest present
+          pip install pytest
+          if [ -d tests ] || [ -f pytest.ini ]; then
+            pytest -q --maxfail=1
+          else
+            echo "No tests found. Skipping unit tests." && exit 1
+          fi
+
+      - name: Run Non-Regression Tests (pytest - regression)
+        run: |
+          # convention: tests/regression directory
+          if [ -d tests/regression ]; then
+            pytest tests/regression -q
+          elif pytest --collect-only -q | grep -q regression; then
+            pytest -q -k regression
+          else
+            echo "No regression tests found. Skipping." && exit 0
+          fi
+
+      - name: Build / Compile (Python)
+        run: |
+          # Optional: build wheel for packaging
+          python -m pip install build
+          if [ -f pyproject.toml ] || [ -f setup.py ]; then
+            python -m build
+          else
+            echo "No pyproject/setup.py found; skipping python build."
+          fi
+
+      - name: Upload python artifacts for later jobs (optional)
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-artifacts
+          path: |
+            dist || true
+
+  # 4) Docker build & test (single job, dépend des jobs (si présents))
+  docker-and-test:
+    name: Docker Build & Container Tests
+    needs: [detect-language, node-ci, python-ci]
+    runs-on: ubuntu-latest
+    env:
+      IMAGE_TAG: ${{ github.sha }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub (optional - set secrets if you push)
+        if: ${{ secrets.DOCKERHUB_USERNAME && secrets.DOCKERHUB_TOKEN }}
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build Docker image
+        run: |
+          # Build a reproducible image; expect a Dockerfile at repo root
+          docker build --pull --no-cache -t "${{ env.IMAGE_TAG }}" .
+
+      - name: Run smoke tests inside container (language-aware)
+        run: |
+          # Attempt to run tests inside the image. Must have test runner installed in image.
+          # For Node projects:
+          if [ -f package.json ]; then
+            docker run --rm "${{ env.IMAGE_TAG }}" /bin/sh -c "if command -v npm >/dev/null; then npm test -- --ci || exit 1; else echo 'No npm inside image'; exit 1; fi"
+          # For Python projects:
+          elif [ -f requirements.txt ] || [ -f pyproject.toml ] || [ -f setup.py ]; then
+            docker run --rm "${{ env.IMAGE_TAG }}" /bin/sh -c "if command -v pytest >/dev/null 2>&1; then pytest -q || exit 1; else echo 'pytest not found in image'; exit 1; fi"
+          else
+            echo "No detection of Node/Python to run container tests; performing basic start check"
+            docker run --rm "${{ env.IMAGE_TAG }}" /bin/sh -c "echo OK"
+          fi
+
+      - name: Optionally push image to registry (only on main)
+        if: github.ref == 'refs/heads/main' && secrets.DOCKERHUB_USERNAME && secrets.DOCKERHUB_TOKEN
+        run: |
+          docker tag "${{ env.IMAGE_TAG }}" "${{ secrets.DOCKERHUB_USERNAME }}/${{ github.repository }}:${{ github.sha }}"
+          docker push "${{ secrets.DOCKERHUB_USERNAME }}/${{ github.repository }}:${{ github.sha }}"
+
+  # 5) SonarQube analysis + Quality Gate check (runs after Docker & tests)
+  sonar-quality:
+    name: SonarQube analysis and quality gate
+    needs: [docker-and-test]
+    runs-on: ubuntu-latest
+    env:
+      SONAR_HOST_URL: https://sonarcloud.io
+      SONAR_TOKEN: 49fdcbdb3b9e7561f43aa7830ea686e124db0956
+      # SONAR_PROJECT_KEY default is repo slug, overridable if needed
+      SONAR_PROJECT_KEY: Katastrophique/epsi_workshop
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Java (required by sonar-scanner)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install Sonar Scanner CLI
+        run: |
+          SCANNER_VERSION=4.9.2.67123
+          wget -q -O sonar-scanner.zip "https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-${SCANNER_VERSION}.zip"
+          unzip -q sonar-scanner.zip
+          mv sonar-scanner-${SCANNER_VERSION} sonar-scanner
+          echo "SONAR_SCANNER_HOME=$(pwd)/sonar-scanner" >> $GITHUB_ENV
+          echo "$SONAR_SCANNER_HOME/bin" >> $GITHUB_PATH
+
+      - name: Run Sonar Scanner
+        id: sonar
+        run: |
+          # Configure sonar properties minimal example
+          # If node -> use sonar.sources=.
+          # We use token auth via SONAR_TOKEN and SONAR_HOST_URL
+          sonar-scanner \
+            -Dsonar.projectKey="Katastrophique/epsi_workshop" \
+            -Dsonar.sources=. \
+            -Dsonar.host.url="https://sonarcloud.io" \
+            -Dsonar.login="49fdcbdb3b9e7561f43aa7830ea686e124db0956" \
+            -Dsonar.java.binaries=target || true
+
+          # After the scanner runs, we attempt to get the ceTaskId from Sonar API for quality gate monitoring
+          # The Sonar server returns task info in the /api/ce/task endpoint; we'll query for the last task for this project
+          # NOTE: this is a heuristic: adapt to your Sonar instance or pass analysisId via scanner output.
+          echo "Waiting for SonarQube analysis to be processed..."
+          # Poll for analysis and quality gate status
+          PROJECT_KEY="Katastrophique/epsi_workshop"
+          AUTH="49fdcbdb3b9e7561f43aa7830ea686e124db0956:"
+          # find last ce task for component
+          for i in {1..30}; do
+            CE_TASK_JSON=$(curl -s -u "$AUTH" "https://sonarcloud.io/api/ce/component?component=${PROJECT_KEY}")
+            ANALYSIS_ID=$(echo "$CE_TASK_JSON" | jq -r '.task[]?.id' | head -n 1)
+            if [ -n "$ANALYSIS_ID" ] && [ "$ANALYSIS_ID" != "null" ]; then
+              echo "Found analysis id: $ANALYSIS_ID"
+              break
+            fi
+            sleep 4
+          done
+          if [ -z "$ANALYSIS_ID" ] || [ "$ANALYSIS_ID" = "null" ]; then
+            echo "Could not find analysis id; Sonar analysis may have failed." && exit 1
+          fi
+          # Poll until task finished and get quality gate status
+          for i in {1..30}; do
+            STATUS_JSON=$(curl -s -u "$AUTH" "https://sonarcloud.io/api/ce/task?id=${ANALYSIS_ID}")
+            task_status=$(echo "$STATUS_JSON" | jq -r '.task.status')
+            if [ "$task_status" = "SUCCESS" ]; then
+              analysis_uuid=$(echo "$STATUS_JSON" | jq -r '.task.analysisId')
+              break
+            fi
+            if [ "$task_status" = "FAILED" ]; then
+              echo "Sonar background task failed." && exit 1
+            fi
+            sleep 4
+          done
+          if [ -z "$analysis_uuid" ] || [ "$analysis_uuid" = "null" ]; then
+            echo "Analysis did not complete in time." && exit 1
+          fi
+
+          # Get quality gate status using web API
+          QG_JSON=$(curl -s -u "$AUTH" "https://sonarcloud.io/api/qualitygates/project_status?analysisId=${analysis_uuid}")
+          qg_status=$(echo "$QG_JSON" | jq -r '.projectStatus.status')
+          echo "Quality Gate status: $qg_status"
+          if [ "$qg_status" != "OK" ]; then
+            echo "Quality Gate failed: $qg_status" && exit 1
+          fi
+          echo "Quality Gate OK"
+
+  # 6) Deployment (conditional: only if Sonar quality gate OK and on main branch)
+  deploy:
+    name: Deploy (only on main and if prior jobs succeeded)
+    needs: [sonar-quality]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Deploy to Kubernetes (example)
+        if: secrets.KUBECONFIG_BASE64
+        env:
+          KUBECONFIG_BASE64: ${{ secrets.KUBECONFIG_BASE64 }}
+        run: |
+          echo "${KUBECONFIG_BASE64}" | base64 -d > kubeconfig
+          export KUBECONFIG=$(pwd)/kubeconfig
+          # Example: update image in deployment manifest and apply
+          kubectl --version
+          kubectl set image deployment/my-app my-app="${{ secrets.DOCKERHUB_USERNAME }}/${{ github.repository }}:${{ github.sha }}" --namespace default || true
+          kubectl rollout status deployment/my-app --namespace default
+
+      - name: SSH deploy to server (alternative)
+        if: secrets.SSH_DEPLOY_KEY && !secrets.KUBECONFIG_BASE64
+        env:
+          SSH_KEY: ${{ secrets.SSH_DEPLOY_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_KEY" > deploy_key
+          chmod 600 deploy_key
+          # copy artifacts or docker image via ssh/scp then run remote commands
+          scp -o StrictHostKeyChecking=no -i deploy_key docker-compose.yml user@yourserver:/tmp/
+          ssh -o StrictHostKeyChecking=no -i deploy_key user@yourserver 'cd /tmp && docker-compose pull && docker-compose up -d --remove-orphans'
+
+      - name: Post-deploy smoke check
+        run: |
+          # Example: call health endpoint
+          for i in {1..10}; do
+            if curl -sfL "https://your.app/health"; then
+              echo "App healthy"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "App did not become healthy" && exit 1
