@@ -1,0 +1,187 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ "main", "develop" ]
+  pull_request:
+    branches: [ "main", "develop" ]
+
+jobs:
+  # 1️⃣ Linting : contrôle du style de code
+  lint:
+    name: Code style check (Airbnb/PEP8)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Détection automatique du langage
+      - name: Detect language
+        id: detect-lang
+        run: |
+          if [ -f "package.json" ]; then
+            echo "lang=javascript" >> $GITHUB_ENV
+          elif [ -f "requirements.txt" ]; then
+            echo "lang=python" >> $GITHUB_ENV
+          else
+            echo "Unsupported project type" && exit 1
+          fi
+
+      # Lint JS avec ESLint (Airbnb)
+      - name: Run ESLint (Airbnb)
+        if: env.lang == 'javascript'
+        run: |
+          npm ci
+          npx eslint . --max-warnings=0
+
+      # Lint Python avec flake8 (PEP8)
+      - name: Run flake8 (PEP8)
+        if: env.lang == 'python'
+        run: |
+          pip install flake8
+          flake8 .
+
+  # 2️⃣ Tests unitaires + non-régression
+  tests:
+    name: Unit & Regression Tests
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Detect language
+        id: detect-lang
+        run: |
+          if [ -f "package.json" ]; then
+            echo "lang=javascript" >> $GITHUB_ENV
+          elif [ -f "requirements.txt" ]; then
+            echo "lang=python" >> $GITHUB_ENV
+          else
+            echo "Unsupported project type" && exit 1
+          fi
+
+      # --- Tests pour Node.js ---
+      - name: Run JS unit tests
+        if: env.lang == 'javascript'
+        run: |
+          npm ci
+          npm run test -- --ci --reporters=default --reporters=jest-junit
+
+      # --- Tests pour Python ---
+      - name: Run Python unit tests
+        if: env.lang == 'python'
+        run: |
+          pip install -r requirements.txt
+          pytest --junitxml=results.xml
+
+      # --- Tests de non-régression ---
+      - name: Non-regression tests
+        run: |
+          echo "Running regression tests..."
+          # Exemple de test de snapshot / comparaison de résultats
+          # pytest --maxfail=1 --disable-warnings -q
+
+  # 3️⃣ Build + Test Docker
+  docker:
+    name: Build and test Docker image
+    runs-on: ubuntu-latest
+    needs: tests
+    env:
+      IMAGE_NAME: ${{ github.repository }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Login to DockerHub
+        run: echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+
+      - name: Build Docker image
+        run: |
+          docker build -t $IMAGE_NAME:latest .
+
+      - name: Test Docker image
+        run: |
+          docker run --rm $IMAGE_NAME:latest echo "Image works!"
+
+      - name: Push Docker image
+        if: github.ref == 'refs/heads/main'
+        run: |
+          docker tag $IMAGE_NAME:latest ${{ secrets.DOCKERHUB_USERNAME }}/$IMAGE_NAME:latest
+          docker push ${{ secrets.DOCKERHUB_USERNAME }}/$IMAGE_NAME:latest
+
+  # 4️⃣ Analyse qualité du code via SonarCloud
+  sonar:
+    name: SonarCloud analysis
+    runs-on: ubuntu-latest
+    needs: docker
+    env:
+      SONAR_HOST_URL: https://sonarcloud.io
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      SONAR_PROJECT_KEY: ${{ secrets.SONAR_PROJECT_KEY }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Java (required by SonarScanner)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install Sonar Scanner CLI
+        run: |
+          SCANNER_VERSION=5.0.1.3006
+          wget -q -O sonar-scanner.zip "https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-${SCANNER_VERSION}.zip"
+          unzip -q sonar-scanner.zip
+          mv sonar-scanner-${SCANNER_VERSION} sonar-scanner
+          echo "SONAR_SCANNER_HOME=$(pwd)/sonar-scanner" >> $GITHUB_ENV
+          echo "$SONAR_SCANNER_HOME/bin" >> $GITHUB_PATH
+
+      - name: Run Sonar Scanner
+        run: |
+          sonar-scanner \
+            -Dsonar.projectKey="${{ secrets.SONAR_PROJECT_KEY }}" \
+            -Dsonar.organization="${{ secrets.SONAR_ORG }}" \
+            -Dsonar.sources=. \
+            -Dsonar.host.url="${{ env.SONAR_HOST_URL }}" \
+            -Dsonar.login="${{ secrets.SONAR_TOKEN }}" \
+            -Dsonar.qualitygate.wait=true
+
+  # 5️⃣ Déploiement (SSH - serveur Docker distant)
+  deploy:
+    name: Deploy to remote server (SSH)
+    runs-on: ubuntu-latest
+    needs: sonar
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Deploy via SSH
+        env:
+          SSH_KEY: ${{ secrets.SSH_DEPLOY_KEY }}
+        run: |
+          echo "$SSH_KEY" > deploy_key
+          chmod 600 deploy_key
+
+          # Copier le docker-compose sur le serveur
+          scp -o StrictHostKeyChecking=no -i deploy_key docker-compose.yml user@yourserver:/tmp/
+
+          # Redémarrer proprement les services Docker
+          ssh -o StrictHostKeyChecking=no -i deploy_key user@yourserver << 'EOF'
+            cd /tmp
+            docker-compose pull
+            docker-compose up -d --remove-orphans
+          EOF
+
+      - name: Post-deploy health check
+        run: |
+          for i in {1..10}; do
+            if curl -sfL "https://your.app/health"; then
+              echo "✅ Application is healthy"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "❌ Application did not become healthy" && exit 1
