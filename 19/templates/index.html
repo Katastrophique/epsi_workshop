@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🏰 École de Magie Poudlard</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Arial', sans-serif;
+            background: linear-gradient(135deg, #1a1a2e, #16213e);
+            color: #f4f4f4;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container { max-width: 1200px; margin: 0 auto; }
+        h1 { color: #ffd700; margin-bottom: 20px; font-size: 2.5em; text-align: center; }
+        
+        .section {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 30px;
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            margin-bottom: 20px;
+        }
+        
+        .record-button {
+            width: 120px; height: 120px;
+            border-radius: 50%;
+            border: 3px solid #ffd700;
+            background: linear-gradient(45deg, #ff6b6b, #ff8e8e);
+            color: white;
+            font-size: 1.2em;
+            cursor: pointer;
+            margin: 20px auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+        }
+        .record-button:hover { transform: scale(1.1); }
+        .record-button.recording { background: linear-gradient(45deg, #ff4757, #ff6b6b); }
+        
+        .spell-selector {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        
+        .spell-option {
+            background: rgba(255, 215, 0, 0.1);
+            border: 2px solid rgba(255, 215, 0, 0.3);
+            padding: 15px;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-align: center;
+        }
+        .spell-option:hover { background: rgba(255, 215, 0, 0.2); }
+        .spell-option.selected { background: rgba(255, 215, 0, 0.3); border-color: #ffd700; }
+        
+        .status { margin: 20px 0; font-size: 1.1em; text-align: center; }
+        .result {
+            background: rgba(255, 215, 0, 0.1);
+            border: 2px solid #ffd700;
+            border-radius: 15px;
+            padding: 20px;
+            margin: 20px 0;
+            display: none;
+        }
+        .result.show { display: block; }
+        .spell-name { font-size: 2em; color: #ffd700; margin-bottom: 10px; }
+        .spell-description { color: #ccc; margin-bottom: 15px; }
+        .confidence { color: #4ecdc4; }
+        
+        .training-section { background: rgba(0, 255, 0, 0.1); border: 2px solid rgba(0, 255, 0, 0.3); }
+        .tips {
+            background: rgba(255, 215, 0, 0.1);
+            border: 1px solid rgba(255, 215, 0, 0.3);
+            border-radius: 10px;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        .tips h4 { color: #ffd700; margin-bottom: 10px; }
+        .tips ul { list-style: none; padding: 0; }
+        .tips li { color: #ccc; margin-bottom: 8px; padding-left: 20px; position: relative; }
+        .tips li:before { content: "✨"; position: absolute; left: 0; color: #ffd700; }
+        .recording-timer {
+            background: rgba(255, 0, 0, 0.2);
+            border: 2px solid #ff0000;
+            border-radius: 10px;
+            padding: 10px;
+            margin: 10px 0;
+            text-align: center;
+            font-weight: bold;
+            color: #ff0000;
+            display: none;
+        }
+        .recording-timer.show { display: block; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🏰 École de Magie Poudlard 🏰</h1>
+        <p style="text-align: center; margin-bottom: 30px;">Prononcez vos formules magiques</p>
+
+        <!-- Section d'entraînement -->
+        <div class="section training-section">
+            <h2>🎓 Mode Entraînement</h2>
+            <p>Choisissez une formule et enregistrez-vous :</p>
+            
+            <div class="spell-selector" id="spellSelector">
+                <div class="spell-option" data-spell="Lumos"><h3>Lumos</h3><p>Allume la baguette</p></div>
+                <div class="spell-option" data-spell="Nox"><h3>Nox</h3><p>Éteint la lumière</p></div>
+                <div class="spell-option" data-spell="Accio"><h3>Accio</h3><p>Attire un objet</p></div>
+                <div class="spell-option" data-spell="Expelliarmus"><h3>Expelliarmus</h3><p>Désarme l'adversaire</p></div>
+                <div class="spell-option" data-spell="Alohomora"><h3>Alohomora</h3><p>Ouvre les serrures</p></div>
+                <div class="spell-option" data-spell="Stupefy"><h3>Stupefy</h3><p>Étourdit</p></div>
+                <div class="spell-option" data-spell="Wingardium Leviosa"><h3>Wingardium Leviosa</h3><p>Fait léviter</p></div>
+                <div class="spell-option" data-spell="Petrificus Totalus"><h3>Petrificus Totalus</h3><p>Immobilise</p></div>
+            </div>
+            
+            <div style="text-align: center;">
+                <button class="record-button" id="trainButton">🎤<br>Entraîner</button>
+                <div class="recording-timer" id="trainTimer">⏱️ Enregistrement en cours...</div>
+                <div class="status" id="trainStatus">Sélectionnez une formule et cliquez pour vous entraîner</div>
+            </div>
+        </div>
+
+        <!-- Section de test -->
+        <div class="section">
+            <h2>🧪 Mode Test</h2>
+            <p>Testez la reconnaissance après l'entraînement :</p>
+            
+            <div style="text-align: center;">
+                <button class="record-button" id="testButton">🎤<br>Tester</button>
+                <div class="recording-timer" id="testTimer">⏱️ Enregistrement en cours...</div>
+                <div class="status" id="testStatus">Cliquez pour tester la reconnaissance</div>
+            </div>
+            
+            <div class="result" id="result">
+                <div class="spell-name" id="spellName"></div>
+                <div class="spell-description" id="spellDescription"></div>
+                <div class="confidence" id="confidence"></div>
+            </div>
+        </div>
+
+        <div class="tips">
+            <h4>💡 Conseils pour un meilleur apprentissage :</h4>
+            <ul>
+                <li>Entraînez-vous d'abord avec "Lumos" (le plus simple)</li>
+                <li>Prononcez clairement et à un rythme normal</li>
+                <li>Enregistrez plusieurs fois chaque formule</li>
+                <li>Testez après chaque entraînement</li>
+                <li>Le modèle s'améliore avec vos enregistrements !</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        class SpellApp {
+            constructor() {
+                this.selectedSpell = null;
+                this.mediaRecorder = null;
+                this.audioChunks = [];
+                this.isRecording = false;
+                
+                this.trainButton = document.getElementById('trainButton');
+                this.testButton = document.getElementById('testButton');
+                this.trainStatus = document.getElementById('trainStatus');
+                this.testStatus = document.getElementById('testStatus');
+                this.trainTimer = document.getElementById('trainTimer');
+                this.testTimer = document.getElementById('testTimer');
+                this.result = document.getElementById('result');
+                this.spellName = document.getElementById('spellName');
+                this.spellDescription = document.getElementById('spellDescription');
+                this.confidence = document.getElementById('confidence');
+                
+                this.init();
+            }
+
+            init() {
+                // Sélection des formules
+                document.querySelectorAll('.spell-option').forEach(option => {
+                    option.addEventListener('click', () => {
+                        document.querySelectorAll('.spell-option').forEach(o => o.classList.remove('selected'));
+                        option.classList.add('selected');
+                        this.selectedSpell = option.dataset.spell;
+                        this.trainStatus.textContent = `Formule sélectionnée: ${this.selectedSpell}`;
+                    });
+                });
+
+                // Boutons d'enregistrement
+                this.trainButton.addEventListener('click', () => {
+                    if (this.isRecording) {
+                        this.stopRecording();
+                    } else {
+                        this.startTraining();
+                    }
+                });
+                
+                this.testButton.addEventListener('click', () => {
+                    if (this.isRecording) {
+                        this.stopRecording();
+                    } else {
+                        this.startTesting();
+                    }
+                });
+            }
+
+            async startTraining() {
+                if (!this.selectedSpell) {
+                    this.trainStatus.textContent = 'Veuillez d\'abord sélectionner une formule';
+                    return;
+                }
+                await this.startRecording('train');
+            }
+
+            async startTesting() {
+                await this.startRecording('test');
+            }
+
+            async startRecording(mode) {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    this.mediaRecorder = new MediaRecorder(stream);
+                    this.audioChunks = [];
+
+                    this.mediaRecorder.ondataavailable = (event) => {
+                        this.audioChunks.push(event.data);
+                    };
+
+                    this.mediaRecorder.onstop = () => {
+                        this.processRecording(mode);
+                    };
+
+                    this.mediaRecorder.start();
+                    this.isRecording = true;
+                    this.updateUI(mode);
+                    this.startTimer(mode);
+                    
+                } catch (error) {
+                    console.error('Erreur microphone:', error);
+                    const status = mode === 'train' ? this.trainStatus : this.testStatus;
+                    status.textContent = 'Erreur: Impossible d\'accéder au microphone';
+                }
+            }
+
+            startTimer(mode) {
+                const timer = mode === 'train' ? this.trainTimer : this.testTimer;
+                timer.classList.add('show');
+                
+                let timeLeft = 3;
+                timer.textContent = `⏱️ Enregistrement en cours... ${timeLeft}s`;
+                
+                const countdown = setInterval(() => {
+                    timeLeft--;
+                    timer.textContent = `⏱️ Enregistrement en cours... ${timeLeft}s`;
+                    
+                    if (timeLeft <= 0) {
+                        clearInterval(countdown);
+                        timer.classList.remove('show');
+                        if (this.isRecording) {
+                            this.stopRecording();
+                        }
+                    }
+                }, 1000);
+            }
+
+            stopRecording() {
+                if (this.mediaRecorder && this.isRecording) {
+                    this.mediaRecorder.stop();
+                    this.mediaRecorder.stream.getTracks().forEach(track => track.stop());
+                    this.isRecording = false;
+                    this.trainTimer.classList.remove('show');
+                    this.testTimer.classList.remove('show');
+                }
+            }
+
+            updateUI(mode) {
+                const button = mode === 'train' ? this.trainButton : this.testButton;
+                const status = mode === 'train' ? this.trainStatus : this.testStatus;
+                
+                if (this.isRecording) {
+                    button.classList.add('recording');
+                    button.innerHTML = '⏹️<br>Arrêter';
+                    status.textContent = 'Enregistrement en cours... Parlez maintenant!';
+                } else {
+                    button.classList.remove('recording');
+                    button.innerHTML = mode === 'train' ? '🎤<br>Entraîner' : '🎤<br>Tester';
+                    status.textContent = mode === 'train' ? 
+                        'Sélectionnez une formule et cliquez pour vous entraîner' : 
+                        'Cliquez pour tester la reconnaissance';
+                }
+            }
+
+            async processRecording(mode) {
+                const status = mode === 'train' ? this.trainStatus : this.testStatus;
+                status.textContent = 'Analyse en cours...';
+                
+                if (mode === 'train') {
+                    this.result.classList.remove('show');
+                }
+
+                const audioBlob = new Blob(this.audioChunks, { type: 'audio/wav' });
+                const formData = new FormData();
+                formData.append('audio', audioBlob, 'recording.wav');
+
+                try {
+                    if (mode === 'train') {
+                        formData.append('spell', this.selectedSpell);
+                        const response = await fetch('/api/train', {
+                            method: 'POST',
+                            body: formData
+                        });
+                        const result = await response.json();
+                        
+                        if (result.success) {
+                            status.textContent = `✅ Entraînement réussi! ${result.message}`;
+                        } else {
+                            status.textContent = `❌ Erreur: ${result.error}`;
+                        }
+                    } else {
+                        const response = await fetch('/api/recognize', {
+                            method: 'POST',
+                            body: formData
+                        });
+                        const result = await response.json();
+                        
+                        if (result.success) {
+                            this.spellName.textContent = result.spell.name;
+                            this.spellDescription.textContent = result.spell.description;
+                            this.confidence.textContent = `Confiance: ${result.spell.confidence}%`;
+                            this.result.classList.add('show');
+                            status.textContent = '✅ Formule reconnue!';
+                        } else {
+                            status.textContent = `❌ Erreur: ${result.error}`;
+                        }
+                    }
+                } catch (error) {
+                    status.textContent = `❌ Erreur: ${error.message}`;
+                }
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            new SpellApp();
+        });
+    </script>
+</body>
+</html>
