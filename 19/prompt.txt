@@ -1,0 +1,64 @@
+Créez une IA de reconnaissance vocale pour les formules magiques d'Harry Potter avec les spécifications suivantes :
+
+## 🎯 Objectif
+Développer une application web Flask qui reconnaît 8 formules magiques d'Harry Potter à partir d'enregistrements vocaux, avec un système d'apprentissage qui s'améliore avec les données de l'utilisateur.
+
+## 📋 Formules Magiques
+- Accio (Attire un objet vers le lanceur)
+- Alohomora (Déverrouille portes et fenêtres)
+- Expelliarmus (Désarme l'adversaire)
+- Lumos (Allume la baguette magique)
+- Nox (Éteint la lumière de la baguette)
+- Wingardium Leviosa (Fait léviter des objets)
+- Petrificus Totalus (Immobilise totalement la cible)
+- Stupefy (Étourdit l'adversaire)
+
+## 🏗️ Architecture
+Créer exactement 2 fichiers dans un dossier `19` :
+
+### 1. `app.py` - Application Flask principale
+- Serveur Flask avec routes API
+- Modèle RandomForest pour la reconnaissance
+- Système de sauvegarde automatique (spell_model.pkl, user_samples.json)
+- Reconnaissance basée sur les noms de fichiers audio
+- Fonctions : entraînement, reconnaissance, sauvegarde/chargement
+- Interface avec emojis et messages clairs
+
+### 2. `templates/index.html` - Interface web complète
+- Design Harry Potter avec thème sombre et doré
+- Section entraînement : sélection de formule + enregistrement
+- Section test : reconnaissance vocale
+- Timer visuel de 3 secondes pour l'enregistrement
+- Contrôle manuel d'arrêt d'enregistrement
+- Messages de statut en temps réel
+- Conseils d'utilisation intégrés
+
+## 🎤 Fonctionnalités Techniques
+- Enregistrement audio via microphone navigateur
+- API REST : /api/train, /api/recognize, /api/spells
+- Sauvegarde persistante des données d'apprentissage
+- Reconnaissance basée sur les caractéristiques des noms de fichiers
+- Interface responsive avec CSS moderne
+- Gestion d'erreurs complète
+
+## 🎨 Interface Utilisateur
+- Thème École de Magie Poudlard (couleurs : noir, doré, rouge)
+- Boutons d'enregistrement circulaires avec animations
+- Sélecteur de formules en grille
+- Timer de compte à rebours visuel
+- Messages de feedback avec emojis
+- Design responsive et moderne
+
+## 💾 Persistance des Données
+- Modèle IA sauvegardé dans spell_model.pkl
+- Échantillons utilisateur dans user_samples.json
+- Chargement automatique au démarrage
+- Sauvegarde après chaque entraînement
+
+## 🚀 Démarrage
+- Commande : `python app.py`
+- URL : http://localhost:5000
+- Port : 5000
+- Mode debug activé
+
+Créez une application complète, fonctionnelle et prête à l'emploi avec une interface intuitive et un système d'apprentissage robuste.
