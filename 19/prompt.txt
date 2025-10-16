@@ -40,7 +40,7 @@ Créer exactement 2 fichiers dans un dossier `19` :
 - Reconnaissance basée sur les caractéristiques des noms de fichiers
 - Interface responsive avec CSS moderne
 - Gestion d'erreurs complète
-
+    
 ## 🎨 Interface Utilisateur
 - Thème École de Magie Poudlard (couleurs : noir, doré, rouge)
 - Boutons d'enregistrement circulaires avec animations
@@ -54,6 +54,7 @@ Créer exactement 2 fichiers dans un dossier `19` :
 - Échantillons utilisateur dans user_samples.json
 - Chargement automatique au démarrage
 - Sauvegarde après chaque entraînement
+- Utilisation NLP
 
 ## 🚀 Démarrage
 - Commande : `python app.py`
